@@ -1,12 +1,12 @@
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CHATGPT_REDIRECT, exportRawPublicKey, hashToken, receiptKeyId } from "@writ/job-send";
-import { PgOAuthStore } from "@writ/job-send/server";
+import { GOOGLE_JWKS_URI, GOOGLE_TOKEN_ENDPOINT, PgOAuthStore, SESSION_COOKIE, SIGN_IN_COOKIE } from "@writ/job-send/server";
 import { startPostgres } from "../../job-send/tests/executor-support/pg.mjs";
 import { CHALLENGE, codeParams, token } from "../../job-send/tests/server/support/harness.mjs";
 import { loadConfig } from "../dist/config.mjs";
@@ -182,4 +182,112 @@ test("an owner app built for another receipt key refuses to start with a rebuild
     OWNER_APP_DIR: ownerAppDir("0000000000000000"),
   });
   await assert.rejects(startService(config, { pool: db.pool, log: () => {}, onError: () => {} }), /built for receipt key 0000000000000000, but this service signs with [0-9a-f]{16}; rebuild it with build:app/);
+});
+
+test("the ChatGPT connect path through the composed service: sign in, allow, code, token, /mcp, one AGENT_CONNECTED", async () => {
+  // A second service on the same database whose Google is faked: the token endpoint returns an ID token signed
+  // by a key the faked JWKS publishes. Everything else is the real wiring, as main.mjs builds it.
+  const CLIENT = "client-id.apps.example.test";
+  const google = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const jwk = { ...google.publicKey.export({ format: "jwk" }), kid: "k1", alg: "RS256", use: "sig" };
+  const b64 = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  let nonce = "";
+  const fakeGoogle = async (url) => {
+    if (String(url) === GOOGLE_JWKS_URI) return { ok: true, status: 200, json: async () => ({ keys: [jwk] }) };
+    if (String(url) === GOOGLE_TOKEN_ENDPOINT) {
+      const at = Math.floor(Date.now() / 1000);
+      const claims = { iss: "https://accounts.google.com", aud: CLIENT, sub: "sub-connect-flow", email: "connect@test.example", email_verified: true, iat: at, exp: at + 3600, nonce };
+      const signing = `${b64({ alg: "RS256", kid: "k1" })}.${b64(claims)}`;
+      return { ok: true, status: 200, json: async () => ({ id_token: `${signing}.${sign("RSA-SHA256", Buffer.from(signing), google.privateKey).toString("base64url")}` }) };
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+  const config = loadConfig({
+    HOST,
+    DATABASE_URL: "postgres://injected.invalid/jobsend",
+    GOOGLE_CLIENT_ID: CLIENT,
+    GOOGLE_CLIENT_SECRET: `secret-${randomBytes(6).toString("hex")}`,
+    RECEIPT_SIGNING_KEY: signingKey,
+    CUSTODY_KEY: randomBytes(32).toString("base64"),
+    OWNER_APP_DIR: ownerAppDir(receiptKeyId(exportRawPublicKey(signingKey))),
+  });
+  const connectErrors = [];
+  const connect = await startService(config, { pool: db.pool, fetchImpl: fakeGoogle, log: () => {}, onError: (e) => connectErrors.push(e) });
+  await new Promise((resolve) => connect.server.listen(0, "127.0.0.1", resolve));
+  const at = `http://127.0.0.1:${connect.server.address().port}`;
+  const cookieOf = (res, name) => res.headers.getSetCookie().map((c) => c.split(";")[0]).find((c) => c.startsWith(`${name}=`) && c.length > name.length + 1);
+  try {
+    // ChatGPT registers, then sends the owner to /oauth/authorize; with no session that leads to sign-in.
+    const registered = await (await fetch(`${at}/oauth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ redirect_uris: [CHATGPT_REDIRECT], client_name: "ChatGPT" }),
+    })).json();
+    const query = new URLSearchParams({
+      response_type: "code",
+      client_id: registered.client_id,
+      redirect_uri: CHATGPT_REDIRECT,
+      code_challenge: CHALLENGE,
+      code_challenge_method: "S256",
+      scope: "jobs.act",
+      resource: `${HOST}/mcp`,
+      state: "st_connect",
+    });
+    const anonymous = await fetch(`${at}/oauth/authorize?${query}`, { redirect: "manual" });
+    assert.equal(anonymous.status, 302);
+    const signInPath = anonymous.headers.get("location");
+    assert.match(signInPath, /^\/auth\/sign-in\?return_to=/);
+
+    // Google sign-in, faked at Google's side only.
+    const start = await fetch(`${at}${signInPath}`, { redirect: "manual" });
+    const toGoogle = new URL(start.headers.get("location"));
+    nonce = toGoogle.searchParams.get("nonce");
+    const callback = await fetch(`${at}/auth/google/callback?code=g1&state=${toGoogle.searchParams.get("state")}`, {
+      redirect: "manual",
+      headers: { cookie: cookieOf(start, SIGN_IN_COOKIE) },
+    });
+    assert.equal(callback.status, 302);
+    const session = cookieOf(callback, SESSION_COOKIE);
+    assert.ok(session, "a session cookie");
+
+    // The consent page, then Allow, exactly as the browser posts it.
+    const consent = await fetch(`${at}/oauth/authorize?${query}`, { headers: { cookie: session }, redirect: "manual" });
+    assert.equal(consent.status, 200);
+    const requestId = /name="request_id" value="([^"]+)"/.exec(await consent.text())?.[1];
+    assert.ok(requestId, "the consent form carries its request id");
+    const allowed = await fetch(`${at}/oauth/authorize`, {
+      method: "POST",
+      headers: { cookie: session, origin: HOST, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ request_id: requestId, decision: "allow" }).toString(),
+      redirect: "manual",
+    });
+    assert.equal(allowed.status, 302);
+    const back = new URL(allowed.headers.get("location"));
+    assert.equal(`${back.origin}${back.pathname}`, CHATGPT_REDIRECT);
+    assert.equal(back.searchParams.get("state"), "st_connect");
+
+    // ChatGPT redeems the code, then calls /mcp with the token.
+    const issued = await token(at, { ...codeParams(registered.client_id, back.searchParams.get("code")), resource: `${HOST}/mcp` });
+    assert.equal(issued.status, 200, JSON.stringify(issued.body));
+    const tools = await fetch(`${at}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${issued.body.access_token}` },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+    });
+    assert.equal(tools.status, 200);
+    assert.ok((await tools.json()).result.tools.some((tool) => tool.name === "propose_send"));
+
+    // Exactly one agent connection for this owner, the token's, recorded by one AGENT_CONNECTED receipt.
+    const { rows: owner } = await db.pool.query("SELECT id FROM owners WHERE google_sub = 'sub-connect-flow'");
+    const { rows: connections } = await db.pool.query("SELECT id, client_label FROM agent_connections WHERE owner_id = $1", [owner[0].id]);
+    assert.deepEqual(connections.map((c) => c.client_label), ["ChatGPT"]);
+    const { rows: tokenRows } = await db.pool.query("SELECT agent_connection_id FROM access_tokens WHERE token_hash = $1", [hashToken(issued.body.access_token)]);
+    assert.equal(tokenRows[0]?.agent_connection_id, connections[0].id, "the token belongs to the connection the consent made");
+    const { rows: receipts } = await db.pool.query("SELECT payload FROM receipts WHERE owner_id = $1 AND type = 'AGENT_CONNECTED'", [owner[0].id]);
+    assert.equal(receipts.length, 1);
+    assert.equal(JSON.parse(receipts[0].payload).agent_connection, connections[0].id);
+    assert.deepEqual(connectErrors, []);
+  } finally {
+    await connect.stop();
+  }
 });
