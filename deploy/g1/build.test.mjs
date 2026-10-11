@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { buildArtifacts, childBuildEnv, deriveReceiptMetadata, runCli } from './build.mjs';
+import { buildArtifacts, checkReceiptManifest, childBuildEnv, deriveReceiptMetadata, runCli } from './build.mjs';
 
 const pair = generateKeyPairSync('ed25519');
 const pem = pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
@@ -11,12 +13,14 @@ const publicMetadata = {
   RECEIPT_KEY_ID: createHash('sha256').update(raw).digest('hex').slice(0, 16),
   RECEIPT_PUBLIC_KEY_B64URL: raw.toString('base64url'),
 };
+const manifest = { key_id: publicMetadata.RECEIPT_KEY_ID, public_key_b64url: publicMetadata.RECEIPT_PUBLIC_KEY_B64URL };
 
 function fixture(overrides = {}) {
   const calls = [];
   return {
     env: { RECEIPT_SIGNING_KEY: pem, PATH: '/runtime/bin', npm_execpath: resolve('npm-cli.js') },
     fileExists: () => true,
+    readFile: () => JSON.stringify(manifest),
     spawn: (...args) => { calls.push(args); return { status: 0 }; },
     ...overrides,
     calls,
@@ -129,10 +133,11 @@ test('service build failure prevents artifact checks and does not report success
   assert.equal(checks, 1); // npm CLI only
 });
 
-test('all three deployment artifacts are required after both builds succeed', () => {
+test('all four deployment artifacts are required after both builds succeed', () => {
   const artifacts = [
     ['packages/job-send-ui/dist/owner-app/index.html', 'ui_index_missing'],
     ['packages/job-send-ui/dist/owner-app/app.js', 'ui_script_missing'],
+    ['packages/job-send-ui/dist/owner-app/receipt-key.json', 'ui_receipt_manifest_missing'],
     ['packages/job-send-app/dist/main.mjs', 'app_entry_missing'],
   ];
   for (const [missing, code] of artifacts) {
@@ -140,6 +145,62 @@ test('all three deployment artifacts are required after both builds succeed', ()
     const f = fixture({ repoRoot: root, fileExists: (file) => file !== join(root, missing) });
     assert.throws(() => buildArtifacts(f), { code });
     assert.equal(f.calls.length, 2);
+  }
+});
+
+test('real manifest file must contain both intended public fields', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'speedwrit-manifest-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const manifestPath = join(dir, 'receipt-key.json');
+  assert.throws(() => checkReceiptManifest({ manifestPath, metadata: publicMetadata }), {
+    code: 'ui_receipt_manifest_unreadable',
+  });
+  writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
+  assert.doesNotThrow(() => checkReceiptManifest({ manifestPath, metadata: publicMetadata }));
+  const otherKey = generateKeyPairSync('ed25519').publicKey.export({ format: 'jwk' }).x;
+  writeFileSync(manifestPath, JSON.stringify({ ...manifest, public_key_b64url: otherKey }));
+  assert.throws(() => checkReceiptManifest({ manifestPath, metadata: publicMetadata }), {
+    code: 'ui_receipt_public_key_mismatch',
+  });
+});
+
+test('malformed manifest JSON and missing or non-string public fields fail', () => {
+  for (const contents of ['secret malformed JSON', 'null', '[]', '"secret string"', '{}',
+    JSON.stringify({ ...manifest, key_id: 123 }),
+    JSON.stringify({ key_id: manifest.key_id }),
+    JSON.stringify({ ...manifest, public_key_b64url: null })]) {
+    const f = fixture({ readFile: () => contents });
+    assert.throws(() => buildArtifacts(f), { code: 'ui_receipt_manifest_invalid' });
+    assert.equal(f.calls.length, 2);
+  }
+});
+
+test('manifest is checked after both builds, at the expected path, with exact ID and key equality', () => {
+  const root = resolve('workspace');
+  const f = fixture({ repoRoot: root, readFile: (file, encoding) => {
+    assert.equal(f.calls.length, 2);
+    assert.equal(file, join(root, 'packages/job-send-ui/dist/owner-app/receipt-key.json'));
+    assert.equal(encoding, 'utf8');
+    return JSON.stringify(manifest);
+  } });
+  assert.deepEqual(buildArtifacts(f), publicMetadata);
+  for (const [field, code] of [['key_id', 'ui_receipt_key_id_mismatch'],
+    ['public_key_b64url', 'ui_receipt_public_key_mismatch']]) {
+    assert.throws(() => buildArtifacts(fixture({
+      readFile: () => JSON.stringify({ ...manifest, [field]: 'secret wrong value' }),
+    })), { code });
+  }
+});
+
+test('manifest failure CLI output never includes file contents or read diagnostics', () => {
+  for (const [readFile, code] of [
+    [() => { throw new Error('secret filesystem diagnostic'); }, 'ui_receipt_manifest_unreadable'],
+    [() => 'secret JSON parse diagnostic', 'ui_receipt_manifest_invalid'],
+    [() => JSON.stringify({ ...manifest, public_key_b64url: pem }), 'ui_receipt_public_key_mismatch'],
+  ]) {
+    const lines = [];
+    assert.equal(runCli([], { ...fixture({ readFile }), write: (line) => lines.push(line) }), 1);
+    assert.deepEqual(lines, [JSON.stringify({ error: code })]);
   }
 });
 
