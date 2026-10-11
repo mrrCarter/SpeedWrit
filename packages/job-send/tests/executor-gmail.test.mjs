@@ -8,6 +8,18 @@ import { TOKEN_FETCH_TIMEOUT_MS } from "../dist/server/index.js";
 const MIME = new TextEncoder().encode("From: owner@example.com\r\nTo: dana@test.example\r\nSubject: Hi\r\n\r\nSGk=\r\n");
 const TOKEN = "ya29.a0-secret-access-token";
 
+/**
+ * `promise`, or a rejection after `ms`: a regression that hangs fails here instead of being
+ * cancelled. The timer is ref'd, so the event loop can't drain first.
+ */
+const within = (promise, ms = 2_000) => {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`still waiting after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+};
+
 function fakeFetch(respond) {
   const calls = [];
   const fetch = async (url, init) => {
@@ -101,7 +113,7 @@ test("gmail: no access token means NOT SENT provider_auth and no request at all"
 test("gmail: an access token that doesn't come in time is NOT SENT, and no request is made", { timeout: 5_000 }, async () => {
   const fake = fakeFetch(() => new Response(JSON.stringify({ id: "m1" }), { status: 200 }));
   const gmail = createGmailProvider({ accessToken: () => new Promise(() => {}), fetch: fake.fetch, tokenTimeoutMs: 30 });
-  assert.deepEqual(await gmail.send(MIME), { status: "not_sent", errorClass: "provider_auth" });
+  assert.deepEqual(await within(gmail.send(MIME)), { status: "not_sent", errorClass: "provider_auth" });
   assert.equal(fake.calls.length, 0);
   // The budgets nest: Google's token call ends inside the token's budget, and the token's ends
   // inside the executor's budget for the whole call (whose timeout is UNKNOWN).
