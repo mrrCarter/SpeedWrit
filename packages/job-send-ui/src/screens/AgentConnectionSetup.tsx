@@ -118,8 +118,9 @@ export function AgentConnectionSetup({ api, connection, call, reload }: AgentCon
 
   return (
     <section aria-label="Agent connection setup">
-      <h2>Connect an agent</h2>
-      <p>Anyone with a secret connection URL can use that agent connection. Sending still requires a job you approve.</p>
+      <h2>Private URL setup</h2>
+      <p>Use this fallback for the terminal Grokbot client or another client that accepts a private MCP URL. Enter it only in the client's local configuration; never paste it into chat. Anyone with this URL can use that agent connection. Sending still requires a job you approve.</p>
+      <p>Creating a private URL makes a separate connection; existing jobs keep their original connection.</p>
       {unavailable ? <p role="status">{SAY.agentConnectionUnavailable}</p> : (
         <form onSubmit={(event) => { event.preventDefault(); void create(); }}>
           <label>
@@ -127,7 +128,7 @@ export function AgentConnectionSetup({ api, connection, call, reload }: AgentCon
             <input value={label} onChange={(event) => setLabel(event.target.value)} disabled={pending !== null} maxLength={100} autoComplete="off" />
           </label>
           <button type="submit" disabled={pending !== null || !label.trim() || url !== null || uncertainRevocation !== null}>
-            {pending === "create" ? "Creating agent connection…" : "Create agent connection URL"}
+            {pending === "create" ? "Creating private connection…" : "Create private connection URL"}
           </button>
         </form>
       )}
@@ -135,7 +136,7 @@ export function AgentConnectionSetup({ api, connection, call, reload }: AgentCon
       {message ? <p role="status">{message}</p> : null}
       {url !== null ? (
         <div>
-          <p>This URL is shown only here. Enter it in your agent before hiding it or leaving this page.</p>
+          <p>This private URL is shown only here. Save it in the client's local configuration before hiding it or leaving this page.</p>
           <label>
             Agent connection URL
             <textarea value={url} readOnly autoComplete="off" spellCheck={false} />
@@ -145,7 +146,7 @@ export function AgentConnectionSetup({ api, connection, call, reload }: AgentCon
       ) : null}
       {target ? (
         <p>
-          Connection: <bdi style={{ overflowWrap: "anywhere" }}>{target.label}</bdi>{" "}
+          Current agent connection: <bdi style={{ overflowWrap: "anywhere" }}>{target.label}</bdi>{" "}
           <button type="button" disabled={pending !== null} onClick={() => void revoke()}>
             {pending === "revoke" ? "Revoking agent connection…" : "Revoke agent connection"}
           </button>

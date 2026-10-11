@@ -63,7 +63,7 @@ function show(api: OwnerApi) {
 }
 async function submitLabel(label = "  Stage agent  ") {
   fireEvent.change(await screen.findByRole("textbox", { name: "Agent label" }), { target: { value: label } });
-  fireEvent.click(screen.getByRole("button", { name: "Create agent connection URL" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create private connection URL" }));
 }
 const secretField = () => screen.queryByRole("textbox", { name: "Agent connection URL" });
 
@@ -137,7 +137,7 @@ describe("owner agent connection setup", () => {
     show(f.api);
     const input = await screen.findByRole("textbox", { name: "Agent label" });
     expect(input).toHaveAttribute("maxlength", "100");
-    const create = screen.getByRole("button", { name: "Create agent connection URL" });
+    const create = screen.getByRole("button", { name: "Create private connection URL" });
     expect(create).toBeDisabled();
     expect(f.posts()).toEqual([]);
     fireEvent.change(input, { target: { value: "   " } });
@@ -169,7 +169,7 @@ describe("owner agent connection setup", () => {
     fireEvent.change(input, { target: { value: "Stage agent" } });
     act(() => { fireEvent.submit(input.closest("form")!); fireEvent.submit(input.closest("form")!); });
     expect(f.posts()).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Creating agent connection…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Creating private connection…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Revoke agent connection" })).toBeDisabled();
     await act(async () => creation.resolve(reply(CREATED)));
     expect(secretField()).toHaveValue(SECRET_URL);
@@ -246,7 +246,7 @@ describe("owner agent connection setup", () => {
     show(f.api);
     await submitLabel();
     await screen.findByText(SAY.agentConnectionUnavailable);
-    expect(screen.queryByRole("button", { name: "Create agent connection URL" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create private connection URL" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText(SAY.agentConnectionCreated)).toBeNull();
     expect(secretField()).toBeNull();
@@ -353,7 +353,7 @@ describe("owner agent connection setup", () => {
       expect(secretField()).toBeNull();
       expect(screen.queryByRole("button", { name: "Revoke agent connection" })).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
-      expect(screen.getByRole("button", { name: "Create agent connection URL" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Create private connection URL" })).toBeEnabled();
       if (snapshot === "none-then-stale") {
         const beforeStaleRefresh = calls.length;
         await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh Connections" })); });
@@ -374,7 +374,7 @@ describe("owner agent connection setup", () => {
       expect(screen.queryByText(SAY.agentConnectionNoneActive)).toBeNull();
       expect(screen.queryByText(SAY.agentConnectionStillActive)).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Hide URL" }));
-      expect(screen.getByRole("button", { name: "Create agent connection URL" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Create private connection URL" })).toBeDisabled();
       // An unresolved target must not silently become the different connection from the snapshot.
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Revoke agent connection" })); });
       const revokes = calls.filter(call => call.path.endsWith("/revoke"));

@@ -104,6 +104,34 @@ function ConnectView({ api, connectGmailHref, call }: { api: OwnerApi; connectGm
       ) : state.gmail.status === "needs_reconnect" ? (
         <a href={connectGmail}>Reconnect Gmail</a>
       ) : null}
+      <details>
+        <summary>Setup guide: ChatGPT, Grokbot, and AI review</summary>
+        <ol>
+          <li><strong>Connect Gmail.</strong> Check the Gmail account above; use Connect Gmail if none is linked.</li>
+          <li>
+            <p><strong>Connect your agent.</strong> In ChatGPT app setup, choose OAuth with automatic client registration and use this public MCP address.</p>
+            <p>
+              <label>
+                ChatGPT MCP server URL<br />
+                <input type="url" value={new URL("/mcp", window.location.href).href} readOnly autoComplete="off" />
+              </label>
+            </p>
+            <p>
+              No manual client ID or client secret is needed. For the terminal Grokbot client, use Private URL setup below.
+              After connecting, refresh Connections, then reopen New job if it was already open.
+            </p>
+          </li>
+          <li>
+            <strong>Create a job.</strong> <a href="#/new">Set up and confirm a job</a> with the recipient, send limit, and expiry you want.
+            New jobs use your most recently connected active agent. Each job stays bound to that connection; an existing ChatGPT job does not transfer to Grokbot.
+          </li>
+          <li>
+            <strong>Review held drafts.</strong> Open <a href="#/exceptions">drafts waiting for your approval</a>, review the exact version shown, then approve or reject it.
+            Approval can send the draft if the job still permits it. STOP sending is available above.
+          </li>
+        </ol>
+        <p><strong>Where AI review fits:</strong> Jobs request AI review for custom wording by default. Adding AI content rules also requests review of template text. A flag or unavailable review sends the draft to Waiting for you for owner approval. AI review cannot approve a draft, send an email, grant permissions, or change the job's limits.</p>
+      </details>
       <AgentConnectionSetup
         api={api}
         connection={state.agentConnectionId ? { id: state.agentConnectionId, label: state.agentConnection?.label ?? "Agent" } : null}
