@@ -89,12 +89,6 @@ function renderApp(route: string, api = fakeApi(), extra: Partial<OwnerAppProps>
   return { api, navigate, signIn };
 }
 
-const type = async (text: string) => {
-  const box = screen.getByRole("textbox");
-  fireEvent.change(box, { target: { value: text } });
-  await act(async () => fireEvent.keyDown(box, { key: "Enter" }));
-};
-
 describe("the owner API client", () => {
   it("writes are JSON, same-origin; a 401 is sign_in and any other error keeps its code", async () => {
     const calls: Array<{ url: string; init: Record<string, unknown> }> = [];
@@ -219,9 +213,7 @@ describe("the client posts the hash the screen showed, not the server's current 
       return { policyVersion: 1, receipt_id: "r1" };
     });
     renderApp("#/new", api as never);
-    await screen.findByRole("textbox");
-    for (const line of ["only email Dana at Acme", "two sends max", "expires tonight"]) await type(line);
-    fireEvent.click(screen.getByRole("button", { name: "Use these limits" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Review this job" }));
     expect(await screen.findByText(SHOWN.slice(0, 12))).toBeTruthy();
     await api.jobs(); // the server's view moves on; the screen still shows SHOWN
     fireEvent.click(screen.getByRole("button", { name: "Confirm job" }));
@@ -294,14 +286,13 @@ describe("OwnerApp", () => {
     expect(screen.queryByRole("link", { name: /Connect Gmail|Reconnect Gmail/ })).toBeNull();
   });
 
-  it("New job: the front door's limits make a draft; Confirm posts the hash it showed, then opens the job", async () => {
+  it("New job: explicit limits make a draft; Confirm posts the returned authority hash, then opens the job", async () => {
     const { api, navigate } = renderApp("#/new");
-    await screen.findByRole("textbox");
-    await type("only email Dana at Acme");
-    await type("two sends max");
-    await type("expires tonight");
-    await type("ask me before custom wording");
-    fireEvent.click(screen.getByRole("button", { name: "Use these limits" }));
+    const review = await screen.findByRole("button", { name: "Review this job" });
+    expect(screen.getByRole("spinbutton", { name: "Sends at most" })).toHaveValue(3);
+    expect(api.createJob).not.toHaveBeenCalled();
+    expect(api.confirmJob).not.toHaveBeenCalled();
+    fireEvent.click(review);
     await waitFor(() => expect(api.createJob).toHaveBeenCalledTimes(1));
     expect(api.createJob).toHaveBeenCalledWith({
       connection_id: "conn_1",
@@ -309,15 +300,32 @@ describe("OwnerApp", () => {
       recipient: "dana@acme.com",
       purpose: AUTHORITY.purpose,
       template_id: "tpl_recap",
-      max_sends: 2,
+      max_sends: 3,
       expires_at: "2026-10-12T06:59:00.000Z",
       auto_send: true,
       allow_custom_with_approval: true,
       ai_review: "custom_only",
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Confirm job" }));
+    const confirm = await screen.findByRole("button", { name: "Confirm job" });
+    // The server returned a two-send authority even though three was requested: review exactly that object.
+    expect(screen.getByText("More than 2 sends")).toBeInTheDocument();
+    expect(api.confirmJob).not.toHaveBeenCalled();
+    fireEvent.click(confirm);
     await waitFor(() => expect(api.confirmJob).toHaveBeenCalledWith("job_1", SHA));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("#/jobs/job_1"));
+  });
+
+  it("New job: cannot review a draft until connection identity has loaded", async () => {
+    let resolve!: (value: ConnectState) => void;
+    const connection = new Promise<ConnectState>((done) => { resolve = done; });
+    const api = fakeApi({ connectState: () => connection });
+    renderApp("#/new", api);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading connections");
+    expect(screen.queryByRole("button", { name: "Review this job" })).toBeNull();
+    expect(api.createJob).not.toHaveBeenCalled();
+    await act(async () => resolve(CONNECTED));
+    expect(await screen.findByRole("button", { name: "Review this job" })).toBeEnabled();
+    expect(api.createJob).not.toHaveBeenCalled();
   });
 
   it("New job: without both connections there is no draft to make", async () => {
@@ -456,7 +464,8 @@ describe("OwnerApp", () => {
   it("no view says anything the Say / Never-say table forbids", async () => {
     for (const route of ["#/connect", "#/new", "#/exceptions", "#/exceptions/p2", "#/exceptions/p9", "#/jobs", "#/jobs/job_1", "#/verify"]) {
       renderApp(route);
-      await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
+      if (route === "#/new") await screen.findByRole("button", { name: "Review this job" });
+      else await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
       expect(findNeverSay(document.body.textContent ?? ""), route).toEqual([]);
       cleanup();
     }

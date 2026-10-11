@@ -92,3 +92,12 @@ bdi { overflow-wrap: anywhere; }
   .owner-nav { gap: 0; }
   .owner-nav a { padding: 10px 8px; }
 }
+
+/* Explicit job form: preview first, then the server-authority confirmation. */
+.owner-layout .grid { display: grid; gap: 18px; }
+.owner-layout .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.owner-layout .muted { color: var(--muted); }
+.owner-layout .row { display: flex; align-items: center; gap: 10px; }
+.owner-layout .btn.primary { background: var(--gold); border-color: var(--gold); color: #17130c; font-weight: bold; justify-self: start; }
+.owner-layout select { display: block; width: 100%; margin: 7px 0 12px; }
+@media (max-width: 700px) { .owner-layout .g2 { grid-template-columns: 1fr; } }
