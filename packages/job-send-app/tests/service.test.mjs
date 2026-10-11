@@ -17,10 +17,12 @@ import { startService } from "../dist/service.mjs";
 
 const HOST = "https://jobs.example.test";
 
-function ownerAppDir() {
+/** A built owner app as build:app writes it, compiled for the receipt key `keyId`. */
+function ownerAppDir(keyId) {
   const dir = mkdtempSync(join(tmpdir(), "owner-app-"));
   writeFileSync(join(dir, "index.html"), '<!doctype html><script type="module" src="/owner-app/app.js"></script>');
   writeFileSync(join(dir, "app.js"), "console.log('owner app');");
+  writeFileSync(join(dir, "receipt-key.json"), JSON.stringify({ key_id: keyId, public_key_b64url: "unused-here" }));
   return dir;
 }
 
@@ -41,7 +43,7 @@ before(async () => {
     GOOGLE_CLIENT_SECRET: `secret-${randomBytes(6).toString("hex")}`,
     RECEIPT_SIGNING_KEY: signingKey,
     CUSTODY_KEY: randomBytes(32).toString("base64"),
-    OWNER_APP_DIR: ownerAppDir(),
+    OWNER_APP_DIR: ownerAppDir(receiptKeyId(exportRawPublicKey(signingKey))),
     SECRET_PATH_FALLBACK: "on",
     OWNER_APP_CONTACTS: JSON.stringify([{ name: "Dana", email: "dana@test.example", company: "Acme" }]),
   });
@@ -167,4 +169,17 @@ test("the boot line names the receipt signing key's id, so the owner app's verif
   assert.equal(service.receiptKeyId, expected);
   assert.equal(lines[0], `receipt signing key ${expected}`, "the first line, before any request");
   assert.equal(lines.some((line) => line.includes("PRIVATE KEY")), false);
+});
+
+test("an owner app built for another receipt key refuses to start with a rebuild instruction", async () => {
+  const config = loadConfig({
+    HOST,
+    DATABASE_URL: "postgres://injected.invalid/jobsend",
+    GOOGLE_CLIENT_ID: "client-id.apps.example.test",
+    GOOGLE_CLIENT_SECRET: `secret-${randomBytes(6).toString("hex")}`,
+    RECEIPT_SIGNING_KEY: signingKey,
+    CUSTODY_KEY: randomBytes(32).toString("base64"),
+    OWNER_APP_DIR: ownerAppDir("0000000000000000"),
+  });
+  await assert.rejects(startService(config, { pool: db.pool, log: () => {}, onError: () => {} }), /built for receipt key 0000000000000000, but this service signs with [0-9a-f]{16}; rebuild it with build:app/);
 });
