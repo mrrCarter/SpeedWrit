@@ -81,6 +81,7 @@ export {
   REFRESH_TOKEN_TTL_SECONDS,
   AUTHORIZATION_CODE_TTL_SECONDS,
   CHATGPT_REDIRECT,
+  GROK_REDIRECT,
   assertOrigin,
   oauthMetadata,
   unauthorizedChallenge,

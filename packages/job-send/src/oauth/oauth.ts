@@ -1,9 +1,9 @@
 // OAuth for the MCP endpoint (spec: "OAuth contract"), as pure functions over stored records.
 // The HTTP routes and the database do the I/O; every decision is made here.
 //
-// - The metadata documents and the 401 challenge ChatGPT reads first.
+// - The metadata documents and the 401 challenge ChatGPT and Grok read first.
 // - PKCE S256 only, with a strict verifier and a constant-time compare.
-// - Redirect URIs: ChatGPT's connector callbacks plus configured fallbacks, matched on the raw
+// - Redirect URIs: ChatGPT's and Grok's connector callbacks plus configured fallbacks, matched on the raw
 //   string, never through a URL parser that could normalize an attacker's input into a match.
 // - The token endpoint's checks (a two-key surface): authorization codes are one-time, bound to
 //   client, redirect URI, PKCE challenge and resource; refresh tokens rotate, and presenting a
@@ -22,6 +22,13 @@ export const AUTHORIZATION_CODE_TTL_SECONDS = 60;
 /** ChatGPT's callback when issuer identification is met, and its per-connection fallback. */
 export const CHATGPT_REDIRECT = "https://chatgpt.com/connector_platform_oauth_redirect";
 const CHATGPT_PER_CONNECTION = /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * Grok's custom-connector callback on grok.com (grok.com/connectors, then New Connector, then
+ * Custom). xAI does not document it; it is the URI Grok registers, as reported by MCP server
+ * operators. Exact string only, trailing slash included.
+ */
+export const GROK_REDIRECT = "https://grok.com/connectors-oauth-exchange-code/";
 
 // ---- Origin and metadata ---------------------------------------------------------------------
 
@@ -110,10 +117,10 @@ export function verifyPkceS256(verifier: unknown, challenge: unknown): boolean {
 
 // ---- Redirect URIs, registration and the authorization request ------------------------------
 
-/** Whether a redirect URI is ChatGPT's or one of the configured fallbacks, by exact string. */
+/** Whether a redirect URI is ChatGPT's, Grok's or one of the configured fallbacks, by exact string. */
 export function isAllowedRedirectUri(uri: unknown, fallbacks: readonly string[] = []): boolean {
   if (typeof uri !== "string") return false;
-  return uri === CHATGPT_REDIRECT || CHATGPT_PER_CONNECTION.test(uri) || fallbacks.includes(uri);
+  return uri === CHATGPT_REDIRECT || uri === GROK_REDIRECT || CHATGPT_PER_CONNECTION.test(uri) || fallbacks.includes(uri);
 }
 
 export type OAuthError =

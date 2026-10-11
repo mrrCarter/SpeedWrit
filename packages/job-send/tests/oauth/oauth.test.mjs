@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   CHATGPT_REDIRECT,
+  GROK_REDIRECT,
   assertOrigin,
   authorizationRedirect,
   checkAccessToken,
@@ -70,6 +71,27 @@ test("redirect URIs: ChatGPT's callbacks and configured fallbacks, by exact stri
     "https://chatgpt.com/connector/oauth/a/b",
     "https://chatgpt.com:8443/connector_platform_oauth_redirect",
     "https://claude.ai/api/mcp/auth_callback",
+  ]) {
+    assert.equal(isAllowedRedirectUri(bad), false, bad);
+  }
+});
+
+test("redirect URIs: Grok's grok.com connector callback, exactly, and no lookalike", () => {
+  assert.equal(GROK_REDIRECT, "https://grok.com/connectors-oauth-exchange-code/");
+  assert.equal(isAllowedRedirectUri(GROK_REDIRECT), true);
+  assert.equal(checkRegistration({ redirect_uris: [GROK_REDIRECT], client_name: "Grok" }).ok, true);
+  for (const bad of [
+    "https://grok.com/connectors-oauth-exchange-code",
+    "https://grok.com/connectors-oauth-exchange-code/x",
+    `${GROK_REDIRECT}?next=https://evil.test`,
+    `${GROK_REDIRECT}#x`,
+    "https://grok.com.evil.test/connectors-oauth-exchange-code/",
+    "https://evil.grok.com/connectors-oauth-exchange-code/",
+    "https://user@grok.com/connectors-oauth-exchange-code/",
+    "http://grok.com/connectors-oauth-exchange-code/",
+    "HTTPS://grok.com/connectors-oauth-exchange-code/",
+    "https://grok.com:8443/connectors-oauth-exchange-code/",
+    "https://grok.com/connectors/oauth/callback",
   ]) {
     assert.equal(isAllowedRedirectUri(bad), false, bad);
   }
