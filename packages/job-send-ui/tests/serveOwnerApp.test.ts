@@ -4,7 +4,8 @@ import { createServer, request, type Server } from "node:http";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { OWNER_APP_CSP, serveOwnerApp, type OwnerAppConfig } from "../src/serve/ownerApp";
+import { spawnSync } from "node:child_process";
+import { OWNER_APP_CSP, RECEIPT_KEY_FILE, serveOwnerApp, type OwnerAppConfig } from "../src/serve/ownerApp";
 
 const DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../dist/test-owner-app");
 const CONFIG: OwnerAppConfig = {
@@ -14,6 +15,8 @@ const CONFIG: OwnerAppConfig = {
   timeZone: "America/Los_Angeles",
 };
 
+const KEY_ID = "0123456789abcdef";
+
 let server: Server;
 let port = 0;
 
@@ -21,7 +24,8 @@ beforeAll(async () => {
   mkdirSync(DIR, { recursive: true });
   writeFileSync(resolve(DIR, "index.html"), "<!doctype html><title>WRIT</title>");
   writeFileSync(resolve(DIR, "app.js"), "export const app = 1;");
-  const handle = serveOwnerApp({ dir: DIR, config: CONFIG });
+  writeFileSync(resolve(DIR, RECEIPT_KEY_FILE), JSON.stringify({ key_id: KEY_ID, public_key_b64url: "x" }));
+  const handle = serveOwnerApp({ dir: DIR, config: CONFIG, receiptKeyId: KEY_ID });
   server = createServer((req, res) => {
     void handle(req, res).then((handled) => {
       if (!handled) {
@@ -54,6 +58,39 @@ function call(method: string, path: string): Promise<{ status: number; headers: 
 }
 
 describe("serveOwnerApp", () => {
+  it("refuses at start an app built for another receipt key, or with no record of its key", () => {
+    expect(() => serveOwnerApp({ dir: DIR, config: CONFIG, receiptKeyId: "fedcba9876543210" })).toThrow(
+      "owner app: built for receipt key 0123456789abcdef, but this service signs with fedcba9876543210; rebuild it with build:app",
+    );
+    const bare = resolve(DIR, "../test-owner-app-bare");
+    mkdirSync(bare, { recursive: true });
+    writeFileSync(resolve(bare, "index.html"), "<!doctype html>");
+    writeFileSync(resolve(bare, "app.js"), "");
+    try {
+      expect(() => serveOwnerApp({ dir: bare, config: CONFIG, receiptKeyId: KEY_ID })).toThrow(`no readable ${RECEIPT_KEY_FILE}`);
+      // Without receiptKeyId the key is not checked (a caller that has none, such as a page-only preview).
+      expect(typeof serveOwnerApp({ dir: bare, config: CONFIG })).toBe("function");
+    } finally {
+      rmSync(bare, { recursive: true, force: true });
+    }
+  });
+
+  it("never serves the key record", async () => {
+    expect((await call("GET", `/owner-app/${RECEIPT_KEY_FILE}`)).status).toBe(404);
+  });
+
+  it("build:app refuses a key id that is not the id of the public key it compiles in", () => {
+    const run = (keyId: string) =>
+      spawnSync(process.execPath, [resolve(dirname(fileURLToPath(import.meta.url)), "../scripts/build-owner-app.mjs")], {
+        env: { ...process.env, RECEIPT_KEY_ID: keyId, RECEIPT_PUBLIC_KEY_B64URL: "A".repeat(43) },
+        encoding: "utf8",
+      });
+    // sha256 of 32 zero bytes starts 66687aadf862bd77; any other id names another key.
+    const wrong = run(KEY_ID);
+    expect(wrong.status).toBe(1);
+    expect(wrong.stderr).toContain("RECEIPT_KEY_ID 0123456789abcdef is not the id of RECEIPT_PUBLIC_KEY_B64URL (whose id is 66687aadf862bd77)");
+  });
+
   it("'/' and '/owner-app' redirect to /owner-app/", async () => {
     for (const path of ["/", "/owner-app"]) {
       const res = await call("GET", path);
