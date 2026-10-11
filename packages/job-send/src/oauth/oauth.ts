@@ -161,7 +161,9 @@ export function checkRegistration(
   if (FORBIDDEN_CHARACTERS.test(declared)) {
     return refuse("invalid_client_metadata", "client_name may not hold control, format or unassigned characters");
   }
-  const name = declared.trim() === "" ? "unnamed client" : [...declared].slice(0, 100).join("");
+  // Blank is judged after the cut: 100 spaces and then a name must not become a blank label.
+  const cut = [...declared].slice(0, 100).join("");
+  const name = cut.trim() === "" ? "unnamed client" : cut;
   return { ok: true, redirect_uris: [...(uris as string[])], client_name: name };
 }
 

@@ -117,7 +117,11 @@ export type OwnerApiOptions = {
   core: OwnerCore;
   /** Revoking an agent connection also revokes its OAuth tokens here. */
   oauthStore: Pick<OAuthStore, "revokeAgentConnection">;
-  /** Where a new secret path is recorded; without it the secret-path route is not found. */
+  /**
+   * Where a new secret path is recorded; without it both secret-path routes are not found. The core
+   * stores secret-path-new's path in Postgres with its connection, so this must be PgSecretPaths on
+   * the core's pool: any other store would never see that path.
+   */
   secretPaths?: { add(secretHash: string, agentConnectionId: string): Promise<void> };
   /** Seconds since the epoch. */
   now?: () => number;
