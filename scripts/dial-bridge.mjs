@@ -6,8 +6,9 @@
 // and starts from the newest row, so history is not replayed. The relay decides dry run vs live call.
 //
 // Usage (on the host, next to the app):
-//   DATABASE_URL=... node scripts/dial-bridge.mjs            # poll every 5 s
-//   DATABASE_URL=... node scripts/dial-bridge.mjs --once     # one pass from the start of today, then exit
+//   DATABASE_URL=... OWNER_ID=own_... node scripts/dial-bridge.mjs          # poll every 5 s, one owner's events
+//   DATABASE_URL=... OWNER_ID=own_... node scripts/dial-bridge.mjs --once   # one pass from the start of today
+// Events are marked seen only after the relay accepts them, so a relay error retries them on the next poll.
 // Optional: DIAL_RELAY_URL (default http://127.0.0.1:5175), POLL_MS (default 5000).
 import { pathToFileURL } from "node:url";
 
@@ -42,8 +43,9 @@ export function alertItems(receipts, heldVersions) {
 
 async function main() {
   const url = process.env.DATABASE_URL;
-  if (!url) {
-    console.error("DATABASE_URL is required");
+  const owner = process.env.OWNER_ID?.trim();
+  if (!url || !owner) {
+    console.error("DATABASE_URL and OWNER_ID (the own_... id whose phone the relay rings) are required");
     process.exit(2);
   }
   const relay = (process.env.DIAL_RELAY_URL ?? "http://127.0.0.1:5175").replace(/\/+$/, "");
@@ -55,41 +57,57 @@ async function main() {
 
   const start = once
     ? new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z")
-    : (await pool.query("SELECT COALESCE(max(created_at), now()) AS t FROM receipts")).rows[0].t;
+    : (await pool.query("SELECT COALESCE(max(created_at), now()) AS t FROM receipts WHERE owner_id = $1", [owner])).rows[0].t;
   let since = start;
   const seen = new Set();
-  console.log(`[dial-bridge] watching from ${new Date(since).toISOString()} -> ${relay} (read-only)`);
+  console.log(`[dial-bridge] watching owner ${owner} from ${new Date(since).toISOString()} -> ${relay} (read-only)`);
+
+  // The relay takes at most 50 items per request. Returns true only when every chunk was accepted (2xx), or the
+  // owner switched alerts off (409 paused: those events are dropped on purpose, not retried later).
+  const post = async (items) => {
+    for (let i = 0; i < items.length; i += 50) {
+      const chunk = items.slice(i, i + 50);
+      try {
+        const res = await fetch(`${relay}/alert`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ items: chunk }),
+          signal: AbortSignal.timeout(5000),
+        });
+        const answer = await res.json().catch(() => ({}));
+        console.log(`[dial-bridge] ${chunk.length} event(s) -> relay ${res.status} ${answer.mode ?? answer.error ?? ""}`);
+        if (res.status === 409) return true;
+        if (!res.ok) return false;
+      } catch (err) {
+        console.error(`[dial-bridge] relay unreachable (${err.name}); will retry ${items.length - i} event(s)`);
+        return false;
+      }
+    }
+    return true;
+  };
 
   const tick = async () => {
     const receipts = (
       await pool.query(
-        "SELECT id, type, payload, created_at FROM receipts WHERE created_at > $1 AND type = ANY($2) ORDER BY created_at",
-        [since, Object.keys(RECEIPT_ALERTS)],
+        "SELECT id, type, payload, created_at FROM receipts WHERE owner_id = $1 AND created_at > $2 AND type = ANY($3) ORDER BY created_at",
+        [owner, since, Object.keys(RECEIPT_ALERTS)],
       )
     ).rows.filter((r) => !seen.has(r.id));
     const held = (
       await pool.query(
-        "SELECT id, version, created_at FROM proposal_versions WHERE created_at > $1 AND state = 'pending' AND cardinality(review_reasons) > 0 ORDER BY created_at",
-        [since],
+        `SELECT v.id, v.version, v.created_at FROM proposal_versions v
+           JOIN proposals p ON p.id = v.proposal_id JOIN jobs j ON j.id = p.job_id
+          WHERE j.owner_id = $1 AND v.created_at > $2 AND v.state = 'pending' AND cardinality(v.review_reasons) > 0
+          ORDER BY v.created_at`,
+        [owner, since],
       )
     ).rows.filter((v) => !seen.has(v.id));
+    const items = alertItems(receipts, held);
+    // Advance only after the relay accepted, so a relay error retries these events on the next poll.
+    if (items.length > 0 && !(await post(items))) return;
     for (const row of [...receipts, ...held]) {
       seen.add(row.id);
       if (row.created_at > since) since = row.created_at;
-    }
-    const items = alertItems(receipts, held);
-    if (items.length === 0) return;
-    try {
-      const res = await fetch(`${relay}/alert`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items }),
-        signal: AbortSignal.timeout(5000),
-      });
-      const answer = await res.json().catch(() => ({}));
-      console.log(`[dial-bridge] ${items.length} event(s) -> relay ${res.status} ${answer.mode ?? answer.error ?? ""}`);
-    } catch (err) {
-      console.error(`[dial-bridge] relay unreachable (${err.name}); ${items.length} event(s) not alerted`);
     }
   };
 
