@@ -2,7 +2,7 @@
 // It asks for "openid email" plus gmail.send, offline and with consent, so a refresh token always
 // comes back. Same shape as owner sign-in (signin.ts): PKCE S256, a state and a nonce, a one-time
 // pending connect bound to the browser by a __Host- cookie, and here also to the signed-in owner,
-// so nobody can attach their Gmail to someone else's WRIT.
+// so nobody can attach their Gmail to someone else's SpeedWrit.
 //
 // - The address comes from the verified ID token, never from a Gmail profile call (send-only).
 // - The granted scopes must include gmail.send: Google's consent screen lets a person untick it.
@@ -164,21 +164,21 @@ export function createGmailConnect(options: GmailConnectOptions) {
     const clearBinding = hostCookie(GMAIL_CONNECT_COOKIE, "", 0);
     const fail = (text: string) => plain(res, 400, text, { "referrer-policy": "no-referrer", "set-cookie": clearBinding });
     const state = url.searchParams.get("state");
-    if (!state) return fail("This Gmail link is not valid. Start again from WRIT.");
+    if (!state) return fail("This Gmail link is not valid. Start again from SpeedWrit.");
     const pending = await one<{ owner_id: string; binding_hash: string; code_verifier: string; nonce: string; return_to: string; expired: boolean }>(
       pool,
       `DELETE FROM gmail_connect_pending WHERE state_hash = $1
        RETURNING owner_id, binding_hash, code_verifier, nonce, return_to, (expires_at <= clock_timestamp()) AS expired`,
       [hashToken(state)],
     );
-    if (!pending || pending.expired) return fail("This Gmail link expired or was already used. Start again from WRIT.");
+    if (!pending || pending.expired) return fail("This Gmail link expired or was already used. Start again from SpeedWrit.");
     const binding = readCookie(req.headers.cookie, GMAIL_CONNECT_COOKIE);
     if (!binding || hashToken(binding) !== pending.binding_hash) return fail("Finish connecting Gmail in the browser where you started. Start again.");
     const owner = await options.owners.owner(req);
     if (!owner || owner.id !== pending.owner_id) return fail("Sign in as the account that started connecting Gmail, then start again.");
     if (url.searchParams.has("error")) return fail("Connecting Gmail was cancelled.");
     const code = url.searchParams.get("code");
-    if (!code) return fail("This Gmail link is not valid. Start again from WRIT.");
+    if (!code) return fail("This Gmail link is not valid. Start again from SpeedWrit.");
 
     let tokens: GoogleTokens;
     let identity: GoogleIdentity;
@@ -192,7 +192,7 @@ export function createGmailConnect(options: GmailConnectOptions) {
     const scopes = tokens.scope.split(" ").filter((scope) => scope !== "");
     if (!scopes.includes(GMAIL_SEND_SCOPE)) {
       await giveBack(tokens);
-      return fail("WRIT was not allowed to send email. Connect again and allow sending email on your behalf.");
+      return fail("SpeedWrit was not allowed to send email. Connect again and allow sending email on your behalf.");
     }
     if (!tokens.refreshToken) return fail("Google did not grant lasting access. Connect again.");
 

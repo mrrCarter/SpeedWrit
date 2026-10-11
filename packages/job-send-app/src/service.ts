@@ -1,4 +1,4 @@
-// The WRIT job-send service, wired: one process and one Postgres (spec: "one standalone service in
+// The SpeedWrit job-send service, wired: one process and one Postgres (spec: "one standalone service in
 // the event repo: web UI, owner API, MCP endpoint, executor"). Every decision lives in the lanes'
 // modules; this file only connects them, in the order the spec's handler list gives:
 //   owner sign-in, Connect Gmail, the owner API, the owner app, then the agent connection.

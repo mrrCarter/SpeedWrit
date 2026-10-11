@@ -54,7 +54,7 @@ if (offending.length > 0) {
 writeFileSync(
   resolve(out, "index.html"),
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-    '<title>WRIT</title><script type="module" src="/owner-app/app.js"></script></head><body><div id="root"></div></body></html>\n',
+    '<title>SpeedWrit</title><script type="module" src="/owner-app/app.js"></script></head><body><div id="root"></div></body></html>\n',
 );
 writeFileSync(resolve(out, "receipt-key.json"), `${JSON.stringify({ key_id: keyId, public_key_b64url: publicKey })}\n`);
 console.log(`built ${out}: ${inputs.length} inputs, key ${keyId}`);

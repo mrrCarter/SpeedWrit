@@ -1,7 +1,7 @@
 {
   "name": "speedwrit",
   "private": true,
-  "description": "WRIT: job-bound sending for AI agents. An agent may email only inside a job its owner approved; signed receipts prove every decision.",
+  "description": "SpeedWrit: job-bound sending for AI agents. An agent may email only inside a job its owner approved; signed receipts prove every decision.",
   "workspaces": [
     "packages/job-send",
     "packages/job-send-ui",
