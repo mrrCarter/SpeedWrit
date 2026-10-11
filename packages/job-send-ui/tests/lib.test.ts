@@ -9,6 +9,11 @@ describe("copy: the Say / Never-say table", () => {
     for (const [key, phrase] of Object.entries(SAY)) expect([key, findNeverSay(phrase)]).toEqual([key, []]);
   });
 
+  it("an unconfirmed request points to the recorder without claiming a recorded provider outcome", () => {
+    expect(SAY.requestUnconfirmed).toContain("Flight Recorder before repeating an action");
+    expect(SAY.requestUnconfirmed).not.toMatch(/nothing (?:new )?was sent|not sent|outcome unknown|provider accepted/i);
+  });
+
   it("finds a never-say phrase as a whole word, ignoring case", () => {
     expect(findNeverSay("Your email was delivered.")).toEqual(["Delivered"]);
     expect(findNeverSay("This is tamper-proof and 100% routed")).toEqual(["tamper-proof", "100% routed"]);

@@ -381,10 +381,69 @@ describe("OwnerApp", () => {
     await waitFor(() => expect(signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2F%23%2Fexceptions"));
   });
 
-  it("another failure shows its code and says nothing was sent", async () => {
+  it("another request failure shows its code and offers the recorder without claiming a send outcome", async () => {
     renderApp("#/exceptions", fakeApi({ approve: async () => Promise.reject(new OwnerApiError(409, "superseded")) }));
     fireEvent.click(await screen.findByRole("button", { name: "Approve version 2" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("That did not work (superseded). Nothing new was sent.");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(`${SAY.requestUnconfirmed} (superseded) Open Jobs.`);
+    expect(within(alert).getByRole("link", { name: "Open Jobs" }).getAttribute("href")).toBe("#/jobs");
+  });
+
+  it.each(["lost response", "503 response"])("an approval with a %s stays unconfirmed and is never automatically retried", async (failure) => {
+    const posts: unknown[] = [];
+    const api = new OwnerApi(async (path, init) => {
+      if (path === "/owner/pending") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            pending: [{
+              proposalId: PENDING.proposalId,
+              jobId: "job_1",
+              version: PENDING.version,
+              sha256: PENDING.versionSha256,
+              reviewReasons: PENDING.reasons,
+              recipient: AUTHORITY.recipient,
+              subject: PENDING.subject,
+              body: PENDING.body,
+              createdAt: "2026-10-11T19:00:00Z",
+              baseline: PENDING.baseline,
+            }],
+          }),
+        };
+      }
+      if (path === "/owner/versions/approve" && init?.method === "POST") {
+        posts.push(JSON.parse(init.body!));
+        // The request was submitted; neither failure establishes whether the provider sent it.
+        if (failure === "lost response") throw new TypeError("Connection closed before the response");
+        return { ok: false, status: 503, json: async () => ({ error: "server_error" }) };
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    const approve = vi.spyOn(api, "approve");
+    renderApp("#/exceptions", api as never);
+    const button = await screen.findByRole("button", { name: "Approve version 2" });
+    vi.useFakeTimers();
+    try {
+      await act(async () => fireEvent.click(button));
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toContain(SAY.requestUnconfirmed);
+      expect(alert.textContent).toContain(`(${failure === "lost response" ? "unknown_error" : "server_error"})`);
+      expect(alert.textContent).toContain("before repeating an action");
+      expect(alert.textContent).toContain("Flight Recorder");
+      expect(within(alert).getByRole("link", { name: "Open Jobs" }).getAttribute("href")).toBe("#/jobs");
+      expect(alert.textContent).not.toMatch(/nothing (?:new )?was sent|not sent/i);
+      for (const recordedOutcome of [SAY.providerAccepted, SAY.notSent, SAY.outcomeUnknown]) {
+        expect(screen.queryByText(recordedOutcome)).toBeNull();
+      }
+      // Leaving the failed request on screen cannot schedule another approval.
+      await act(async () => vi.advanceTimersByTimeAsync(30_000));
+      expect(approve).toHaveBeenCalledTimes(1);
+      expect(approve).toHaveBeenCalledWith("p2", 2, SHA);
+      expect(posts).toEqual([{ proposal_id: "p2", version: 2, shown_sha256: SHA }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a job's Flight Recorder resolves an UNKNOWN send by its dispatch, in the core's words", async () => {

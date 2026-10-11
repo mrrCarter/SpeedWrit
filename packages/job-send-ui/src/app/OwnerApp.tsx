@@ -239,7 +239,11 @@ export function OwnerApp(props: OwnerAppProps) {
         <a href="#/connect">Connections</a> · <a href="#/new">New job</a> · <a href="#/exceptions">Waiting for you</a> · <a href="#/jobs">Jobs</a> ·{" "}
         <a href="#/verify">Verify</a>
       </nav>
-      {problem ? <p role="alert">That did not work ({problem}). Nothing new was sent.</p> : null}
+      {problem ? (
+        <p role="alert">
+          {SAY.requestUnconfirmed} ({problem}) <a href="#/jobs">Open Jobs</a>.
+        </p>
+      ) : null}
       <main>{view}</main>
     </div>
   );
