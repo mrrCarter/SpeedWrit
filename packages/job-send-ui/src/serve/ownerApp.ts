@@ -12,6 +12,8 @@ export type { OwnerAppConfig };
 /** The owner app's page policy: its own script and API, nothing else, never framed. */
 export const OWNER_APP_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 export const OWNER_APP_PATH = "/owner-app/";
+/** Written by build:app beside app.js: the receipt key compiled into the app. Read at start, never served. */
+export const RECEIPT_KEY_FILE = "receipt-key.json";
 
 const COMMON = {
   "content-security-policy": OWNER_APP_CSP,
@@ -35,11 +37,30 @@ export function checkOwnerAppConfig(config: OwnerAppConfig): void {
 }
 
 /**
- * The handler: true when it answered (a path it owns), false for any other path. `dir` is the build output
- * (dist/owner-app); its two files are read now, so a missing build fails at start, not on the first visit.
+ * Refuses an owner app built with another receipt key than the one the service signs with: its Verify page would
+ * call every receipt "Signature invalid". `receiptKeyId` is the signing key's id, receiptKeyId(exportRawPublicKey(pem)).
  */
-export function serveOwnerApp(options: { dir: string; config: OwnerAppConfig }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
+export function checkOwnerAppReceiptKey(dir: string, receiptKeyId: string): void {
+  let built: unknown;
+  try {
+    built = JSON.parse(readFileSync(join(dir, RECEIPT_KEY_FILE), "utf8"));
+  } catch {
+    throw new Error(`owner app: no readable ${RECEIPT_KEY_FILE} in ${dir}; rebuild it with build:app`);
+  }
+  const builtId = built !== null && typeof built === "object" ? (built as { key_id?: unknown }).key_id : undefined;
+  if (builtId !== receiptKeyId) {
+    throw new Error(`owner app: built for receipt key ${String(builtId)}, but this service signs with ${receiptKeyId}; rebuild it with build:app`);
+  }
+}
+
+/**
+ * The handler: true when it answered (a path it owns), false for any other path. `dir` is the build output
+ * (dist/owner-app); its two files are read now, so a missing build fails at start, not on the first visit. With
+ * `receiptKeyId`, an app built for another receipt key fails at start too.
+ */
+export function serveOwnerApp(options: { dir: string; config: OwnerAppConfig; receiptKeyId?: string }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   checkOwnerAppConfig(options.config);
+  if (options.receiptKeyId !== undefined) checkOwnerAppReceiptKey(options.dir, options.receiptKeyId);
   const files = {
     html: readFileSync(join(options.dir, "index.html")),
     js: readFileSync(join(options.dir, "app.js")),
