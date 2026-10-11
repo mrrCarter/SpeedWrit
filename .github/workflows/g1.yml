@@ -1,0 +1,50 @@
+name: G1 deployment checks
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/g1.yml'
+      - 'deploy/g1/**'
+      - 'scripts/g1-preflight*'
+      - 'packages/**'
+      - 'package*.json'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/g1.yml'
+      - 'deploy/g1/**'
+      - 'scripts/g1-preflight*'
+      - 'packages/**'
+      - 'package*.json'
+
+permissions:
+  contents: read
+
+jobs:
+  deployment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test readiness and private build environment
+        run: node --test scripts/g1-preflight.test.mjs deploy/g1/build.test.mjs
+      - name: Compile Azure templates without authentication
+        run: |
+          az bicep install
+          az bicep build --file deploy/g1/azure-infra.bicep --outfile "$RUNNER_TEMP/infra.json"
+          az bicep build --file deploy/g1/azure-app.bicep --outfile "$RUNNER_TEMP/app.json"
+      - name: Load pinned public receipt metadata
+        run: |
+          node --input-type=module -e '
+            import { readFileSync, appendFileSync } from "node:fs";
+            const key = JSON.parse(readFileSync("deploy/g1/receipt-key.json", "utf8"));
+            if (!/^[a-f0-9]{16}$/.test(key.key_id) || !/^[A-Za-z0-9_-]{43}$/.test(key.public_key_b64url)) throw new Error("invalid public key pin");
+            appendFileSync(process.env.GITHUB_ENV, `RECEIPT_KEY_ID=${key.key_id}\nRECEIPT_PUBLIC_KEY_B64URL=${key.public_key_b64url}\n`);
+          '
+      - name: Build runtime image
+        run: docker build --file deploy/g1/Dockerfile --build-arg RECEIPT_KEY_ID --build-arg RECEIPT_PUBLIC_KEY_B64URL --tag speedwrit:g1-ci .
