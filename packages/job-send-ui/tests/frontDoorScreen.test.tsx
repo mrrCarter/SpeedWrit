@@ -27,6 +27,21 @@ function setup(classify?: Classify) {
 }
 
 describe("FrontDoor", () => {
+  it("the reported four-line setup submits three sends without a starter pack", async () => {
+    const { onUse, type, use, line } = setup();
+    expect(within(screen.getByRole("list", { name: "Limits" })).queryAllByRole("listitem")).toHaveLength(0);
+    for (const text of ["only email Dana at Acme", "only send max 3", "expires tonight", "ask before custom wording"]) await type(text);
+    expect(line("only send max 3").getByText("At most 3 sends")).toBeTruthy();
+    expect(use().disabled).toBe(false);
+    fireEvent.click(use());
+    expect(onUse).toHaveBeenCalledWith({
+      recipient: "dana@acme.com",
+      maxSends: 3,
+      expiresAt: "2026-10-12T06:59:00.000Z",
+      allowCustomWithApproval: true,
+    });
+  });
+
   it("each line becomes its chip, and 'Use these limits' hands over the draft once the job is complete", async () => {
     const { onUse, type, use, line } = setup();
     await type("only email Dana at Acme");

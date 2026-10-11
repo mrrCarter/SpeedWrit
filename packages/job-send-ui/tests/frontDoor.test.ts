@@ -59,6 +59,27 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(parseLine("0 sends max", CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
   });
 
+  it("'only send max 3' becomes a three-send limit without classification", async () => {
+    const classify = vi.fn<Classify>();
+    const state = await readLine("only send max 3", CTX, classify);
+    expect(limitOf(state)).toEqual({ kind: "count", maxSends: 3 });
+    expect(state.status === "limit" && chipFor(state)).toMatchObject({ text: "Never: a fourth send", detail: "At most 3 sends" });
+    expect(classify).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 11])("'only send max %s' needs a valid count", (count) => {
+    expect(parseLine(`only send max ${count}`, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
+  });
+
+  it("the new count phrase preserves recipient parsing and the smaller count rule", () => {
+    const states = ["only send to Dana at Acme", "two sends max", "only send max 3", "expires tonight"].map((line) => parseLine(line, CTX));
+    expect(states.every((state) => state.status === "limit")).toBe(true);
+    const { draft, missing, problems } = draftFrom(states.flatMap((state) => state.status === "limit" ? [state.limit] : []));
+    expect(draft).toMatchObject({ recipient: "dana@acme.com", maxSends: 2 });
+    expect(missing).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
   it("'expires tonight' and 'until 6pm' are computed in the owner's time zone: Never after that", () => {
     expect(limitOf(parseLine("expires tonight", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T06:59:00.000Z" });
     expect(limitOf(parseLine("until 6pm", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T01:00:00.000Z" });

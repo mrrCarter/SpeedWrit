@@ -57,6 +57,7 @@ const MESSAGES = "(?:sends?|emails?|e-mails?|messages?)";
 const COUNT_PATTERNS = [
   new RegExp(`\\b${NUMBER}\\s+${MESSAGES}\\s+(?:max|maximum|at\\s+most|tops)\\b`, "i"),
   new RegExp(`\\b(?:max|maximum|at\\s+most|up\\s+to|no\\s+more\\s+than|only)\\s+(?:of\\s+)?${NUMBER}\\s+${MESSAGES}\\b`, "i"),
+  new RegExp(`\\bonly\\s+send\\s+(?:max|maximum)\\s+${NUMBER}\\b`, "i"),
 ];
 const RECIPIENT = /^(?:only|just)\s+(?:email|e-mail|mail|message|contact|send\s+to|write\s+to)\s+(.+?)\s*[.!]?$/i;
 const TONIGHT = /\b(?:expires?|ends?|until|till|good\s+until|valid\s+until)\s+tonight\b|^tonight$/i;
