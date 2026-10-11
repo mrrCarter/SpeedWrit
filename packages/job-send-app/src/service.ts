@@ -69,6 +69,8 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
   // An idle client whose backend dies (a Postgres restart, a network blip) makes the pool emit "error";
   // unhandled, that event exits the process. An injected pool belongs to the caller.
   if (ownPool) pool.on("error", onError);
+  // Started partway through: a failure after it (an owner app built for another key) must stop it too.
+  let stopSweeper: (() => void) | undefined;
   try {
     // A public key id, not a secret: compare it with build:app's "key <id>" line, or every receipt on the
     // owner app's verify page reads "Signature invalid".
@@ -88,7 +90,7 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
       revoke: tokens.revoke,
       demoRecipients: parseDemoRecipients(config.demoRecipients),
     });
-    const stopSweeper = executor.startSweeper(undefined, onError);
+    stopSweeper = executor.startSweeper(undefined, onError);
 
     const ownerAuth = createOwnerAuth({ host: config.host, google, store: new PgOwnerStore(pool), fetchImpl, jwks, onError });
     const gmail = createGmailConnect({ host: config.host, google, pool, executor, custody, owners: ownerAuth, fetchImpl, jwks, onError });
@@ -104,6 +106,8 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
         contacts: config.contacts,
         connectGmailHref: GMAIL_CONNECT_PATH,
       },
+      // An app built for another receipt key would call every receipt "Signature invalid": refuse to start.
+      receiptKeyId: keyId,
     });
 
     const backend = createMcpBackend({
@@ -148,12 +152,13 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
       server,
       receiptKeyId: keyId,
       async stop() {
-        stopSweeper();
+        stopSweeper?.();
         await new Promise<void>((resolve) => server.close(() => resolve()));
         if (ownPool) await pool.end();
       },
     };
   } catch (error) {
+    stopSweeper?.();
     if (ownPool) await pool.end().catch(() => undefined);
     throw error;
   }
