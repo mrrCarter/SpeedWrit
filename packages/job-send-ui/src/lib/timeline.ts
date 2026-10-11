@@ -106,9 +106,10 @@ export function buildTimeline(receipts: readonly TimelineReceipt[]): TimelineRow
         break;
       }
       case "OUTCOME_RESOLVED": {
-        // As the executor signs it (#520): resolution "sent" when the owner saw it arrive, "not_sent" when it did not.
+        // As the executor signs it: resolution "sent" when the owner saw it arrive, "not_arrived" when they
+        // have not (older receipts say "not_sent"). Not arriving is an observation: the send still counts.
         const seen = receipt.detail?.resolution === "sent";
-        rows.push({ ...base, label: seen ? "You saw it arrive" : "You said it did not arrive", tone: "info", control: "none" });
+        rows.push({ ...base, label: seen ? "You saw it arrive" : SAY.resolvedNotArrived, tone: "info", control: "none" });
         break;
       }
       case "DELIVERY_WITNESSED": {

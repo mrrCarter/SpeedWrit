@@ -17,6 +17,7 @@ export const SAY = {
   agentConnectionStillActive: "This agent connection is still active. Revocation has not been confirmed.",
   resolveSeen: "I see it",
   resolveNotArrived: "It did not arrive",
+  resolvedNotArrived: "You said it did not arrive. It still counts as a send, because it may only be late or in spam.",
   signatureVerified: "Signature verified",
   signatureInvalid: "Signature invalid",
   /** Not a result: the verify library could not run here (no WebCrypto Ed25519), so nothing was checked. */
