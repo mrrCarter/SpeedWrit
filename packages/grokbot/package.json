@@ -1,0 +1,26 @@
+{
+  "name": "@writ/grokbot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "grokbot: Grok (xAI) as a SpeedWrit agent client, over xAI's remote MCP tool.",
+  "type": "module",
+  "bin": {
+    "grokbot": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "build": "tsc --project tsconfig.json",
+    "test": "npm run build --workspace=@writ/job-send && npm run build && node --test \"tests/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@types/node": "24.7.1",
+    "@writ/job-send": "0.1.0",
+    "typescript": "5.9.2"
+  }
+}
