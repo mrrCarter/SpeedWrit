@@ -53,6 +53,9 @@ const RECEIPTS: ListedReceipt[] = [
 /** A fake owner API: each method a vi.fn resolving to a fixture. */
 function fakeApi(overrides: Partial<Record<keyof OwnerApi, (...args: never[]) => Promise<unknown>>> = {}) {
   const api = {
+    integrations: vi.fn(async () => ({ jev: { configured: false, model: "jev-1.13.0" }, dial: { configured: false, live: false, enabled: false, status: "unconfigured", pending: 0, last_result: null } })),
+    setAlertsEnabled: vi.fn(async () => ({ enabled: false })),
+    testAlert: vi.fn(async () => ({ queued: true })),
     me: vi.fn(async () => ({ owner: { id: "own_1", email: "owner@test.example" } })),
     connectState: vi.fn(async () => CONNECTED),
     stop: vi.fn(async () => ({ stopped: true, receipt_ids: ["r9"] })),
@@ -466,7 +469,15 @@ describe("OwnerApp", () => {
       renderApp(route);
       if (route === "#/new") await screen.findByRole("button", { name: "Review this job" });
       else await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
-      expect(findNeverSay(document.body.textContent ?? ""), route).toEqual([]);
+      // The exact configured model is diagnostic data, not product prose.
+      if (route === "#/connect") await screen.findByText("jev-1.13.0");
+      const prose = document.body.cloneNode(true) as HTMLElement;
+      if (route === "#/connect") {
+        const model = prose.querySelector('[aria-label="Integrations"] code');
+        expect(model?.textContent).toBe("jev-1.13.0");
+        model?.remove();
+      }
+      expect(findNeverSay(prose.textContent ?? ""), route).toEqual([]);
       cleanup();
     }
   });
