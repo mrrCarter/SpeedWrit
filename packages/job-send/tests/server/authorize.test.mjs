@@ -52,7 +52,9 @@ test("the whole connection: register, consent, allow, code, token, /mcp", async 
     const { clientId, view, res } = await consentFor(app);
     assert.equal(res.headers.get("x-frame-options"), "DENY");
     assert.equal(res.headers.get("content-security-policy"), CSP("https://chatgpt.com"));
-    assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+    // Not no-referrer: that makes a browser POST the form with "Origin: null", which answerConsent refuses (CSRF),
+    // so Allow could never succeed in a real browser. same-origin keeps the real Origin on the POST.
+    assert.equal(res.headers.get("referrer-policy"), "same-origin");
     assert.equal(res.headers.get("cache-control"), "no-store");
     assert.equal(view.ownerEmail, "owner@example.test");
     assert.deepEqual(view.request, { clientId, clientName: "ChatGPT", redirectUri: CHATGPT_REDIRECT, codeChallenge: CHALLENGE, state: "st_1", scope: "jobs.act" });
