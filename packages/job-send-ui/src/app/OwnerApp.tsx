@@ -2,6 +2,7 @@
 //   #/connect     Connections: Gmail (or Connect Gmail), the agent connection, STOP
 //   #/new         the front door, then Confirm job (confirms exactly the hash it showed)
 //   #/exceptions  pending versions: Approve or Reject exactly the version shown
+//   #/exceptions/<proposal_id>  the same list, that proposal's card first (the link an alert carries)
 //   #/jobs        the owner's jobs;  #/jobs/<id>  that job's Flight Recorder
 //   #/verify      check a receipt against the pinned key (opened from a Flight Recorder row, or pasted)
 // A 401 sends the browser to sign-in and back. Every outcome is said in the Say / Never-say table's words.
@@ -132,25 +133,31 @@ function NewJobView(props: Pick<OwnerAppProps, "api" | "jobDefaults" | "contacts
   );
 }
 
-function ExceptionsView({ api, call }: { api: OwnerApi; call: ReturnType<typeof useCall>["run"] }) {
+function ExceptionsView({ api, call, focus }: { api: OwnerApi; call: ReturnType<typeof useCall>["run"]; focus?: string }) {
   const [pending, setPending] = useState<PendingVersion[] | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const load = useCallback(() => void call(() => api.pending()).then((next) => next && setPending(next.pending)), [api, call]);
   useEffect(load, [load]);
   if (!pending) return <p>Loading…</p>;
+  // An alert's link names one proposal. Its card comes first and marked; it is the same card as in the list (the
+  // version, hash and Approve the server listed), so the link only orders what is shown and decides nothing.
+  const focused = focus === undefined ? [] : pending.filter((version) => version.proposalId === focus);
+  const card = (version: PendingVersion) => (
+    <ExceptionCard
+      key={`${version.proposalId}#${version.version}`}
+      pending={version}
+      onApprove={(proposalId, number, sha) => void call(() => api.approve(proposalId, number, sha)).then((answer) => answer && (setSaid(approveWords(answer)), load()))}
+      onReject={(proposalId, number, sha) => void call(() => api.reject(proposalId, number, sha)).then((done) => done && (setSaid("Rejected. Nothing was sent."), load()))}
+    />
+  );
   return (
     <section aria-label="Exceptions">
       <h2>Waiting for you</h2>
       {said ? <p role="status">{said}</p> : null}
+      {focus !== undefined && focused.length === 0 ? <p>That proposal is not waiting for you any more.</p> : null}
+      {focused.length > 0 ? <section aria-label="From your alert">{focused.map(card)}</section> : null}
       {pending.length === 0 ? <p>Nothing is waiting for you.</p> : null}
-      {pending.map((version) => (
-        <ExceptionCard
-          key={`${version.proposalId}#${version.version}`}
-          pending={version}
-          onApprove={(proposalId, number, sha) => void call(() => api.approve(proposalId, number, sha)).then((answer) => answer && (setSaid(approveWords(answer)), load()))}
-          onReject={(proposalId, number, sha) => void call(() => api.reject(proposalId, number, sha)).then((done) => done && (setSaid("Rejected. Nothing was sent."), load()))}
-        />
-      ))}
+      {pending.filter((version) => !focused.includes(version)).map(card)}
     </section>
   );
 }
@@ -199,19 +206,31 @@ function JobView({ api, jobId, call, onReceipts }: { api: OwnerApi; jobId: strin
   );
 }
 
+/** A route segment decoded, or null when it is not valid percent-encoding: a bad link is Not found, not a crash. */
+function decodeSegment(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
 /** The owner app. */
 export function OwnerApp(props: OwnerAppProps) {
   const { api, route, signIn } = props;
   const { problem, run } = useCall(signIn, route);
   const [lastReceipts, setLastReceipts] = useState<ListedReceipt[]>([]);
   const path = route.replace(/^#/, "") || "/connect";
+  const exceptionsMatch = /^\/exceptions(?:\/([^/]+))?$/.exec(path);
+  const focus = exceptionsMatch?.[1] === undefined ? undefined : decodeSegment(exceptionsMatch[1]);
   const jobMatch = /^\/jobs\/([^/]+)$/.exec(path);
+  const jobId = jobMatch ? decodeSegment(jobMatch[1] ?? "") : null;
   let view;
   if (path === "/connect") view = <ConnectView api={api} connectGmailHref={props.connectGmailHref} call={run} />;
   else if (path === "/new") view = <NewJobView {...props} call={run} />;
-  else if (path === "/exceptions") view = <ExceptionsView api={api} call={run} />;
+  else if (exceptionsMatch && focus !== null) view = <ExceptionsView api={api} call={run} focus={focus} />;
   else if (path === "/jobs") view = <JobsView api={api} call={run} />;
-  else if (jobMatch) view = <JobView api={api} jobId={decodeURIComponent(jobMatch[1] ?? "")} call={run} onReceipts={setLastReceipts} />;
+  else if (jobId !== null) view = <JobView api={api} jobId={jobId} call={run} onReceipts={setLastReceipts} />;
   else if (path === "/verify") view = <VerifyPage keyFingerprint={props.pinned.keyId} verify={pinnedVerifier(props.pinned)} initialReceipt={lastReceipts.length === 1 ? lastReceipts[0]?.text : ""} />;
   else view = <p>Not found.</p>;
   return (

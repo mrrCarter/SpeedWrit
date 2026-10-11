@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { Job } from "@writ/job-send/contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { jobDraftBody, jobDraftFromAuthority, OwnerApi, OwnerApiError, type ConnectState, type ListedReceipt } from "../src/app/api";
@@ -335,6 +335,47 @@ describe("OwnerApp", () => {
     expect(api.reject).toHaveBeenCalledWith("p2", 2, SHA);
   });
 
+  it("an alert's link, #/exceptions/<proposal_id>, puts that proposal's card first and marked; Approve sends its own hash", async () => {
+    const SHA3 = "3".repeat(64);
+    const P3: PendingVersion = { ...PENDING, proposalId: "p3", version: 1, versionSha256: SHA3, baseline: { label: "nothing earlier (the first version)", subject: "", body: "" } };
+    const cards = () => screen.getAllByRole("article").map((card) => card.getAttribute("aria-label"));
+    const { api } = renderApp("#/exceptions/p3", fakeApi({ pending: async () => ({ pending: [PENDING, P3] }) }));
+    const marked = await screen.findByRole("region", { name: "From your alert" });
+    expect(within(marked).getAllByRole("article").map((card) => card.getAttribute("aria-label"))).toEqual(["Version 1 of p3"]);
+    expect(cards()).toEqual(["Version 1 of p3", "Version 2 of p2"]);
+    expect(screen.queryByText("That proposal is not waiting for you any more.")).toBeNull();
+    fireEvent.click(within(marked).getByRole("button", { name: "Approve version 1" }));
+    await waitFor(() => expect(api.approve).toHaveBeenCalledWith("p3", 1, SHA3));
+    cleanup();
+    // Without the id: the server's order, nothing marked.
+    renderApp("#/exceptions", fakeApi({ pending: async () => ({ pending: [PENDING, P3] }) }));
+    await screen.findAllByRole("article");
+    expect(cards()).toEqual(["Version 2 of p2", "Version 1 of p3"]);
+    expect(screen.queryByRole("region", { name: "From your alert" })).toBeNull();
+  });
+
+  it("an alert's link for a proposal no longer waiting says so and lists the rest; a malformed link is Not found", async () => {
+    renderApp("#/exceptions/p9");
+    expect(await screen.findByText("That proposal is not waiting for you any more.")).toBeTruthy();
+    expect(screen.getAllByRole("article").map((card) => card.getAttribute("aria-label"))).toEqual(["Version 2 of p2"]);
+    expect(screen.queryByRole("region", { name: "From your alert" })).toBeNull();
+    cleanup();
+    renderApp("#/exceptions");
+    await screen.findByRole("article");
+    expect(screen.queryByText("That proposal is not waiting for you any more.")).toBeNull();
+    cleanup();
+    for (const route of ["#/exceptions/%E0", "#/jobs/%E0", "#/exceptions/p2/x"]) {
+      renderApp(route);
+      expect(screen.getByText("Not found."), route).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("a 401 on an alert's link comes back to the same link after sign-in", async () => {
+    const { signIn } = renderApp("#/exceptions/p3", fakeApi({ pending: async () => Promise.reject(new OwnerApiError(401, "sign_in")) }));
+    await waitFor(() => expect(signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2F%23%2Fexceptions%2Fp3"));
+  });
+
   it("a 401 anywhere leaves for sign-in and comes back to the same view", async () => {
     const { signIn } = renderApp("#/exceptions", fakeApi({ pending: async () => Promise.reject(new OwnerApiError(401, "sign_in")) }));
     await waitFor(() => expect(signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2F%23%2Fexceptions"));
@@ -354,7 +395,7 @@ describe("OwnerApp", () => {
   });
 
   it("no view says anything the Say / Never-say table forbids", async () => {
-    for (const route of ["#/connect", "#/new", "#/exceptions", "#/jobs", "#/jobs/job_1", "#/verify"]) {
+    for (const route of ["#/connect", "#/new", "#/exceptions", "#/exceptions/p2", "#/exceptions/p9", "#/jobs", "#/jobs/job_1", "#/verify"]) {
       renderApp(route);
       await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
       expect(findNeverSay(document.body.textContent ?? ""), route).toEqual([]);
