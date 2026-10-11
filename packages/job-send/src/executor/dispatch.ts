@@ -705,8 +705,10 @@ export function createExecutor(deps: ExecutorDeps) {
   }
 
   /**
-   * The owner resolves an UNKNOWN outcome: "seen" (witnessed; the reservation stays used) or
-   * "not_arrived" (the reservation is released). Writes OUTCOME_RESOLVED naming the owner.
+   * The owner records what they observed about an UNKNOWN outcome: "seen" (it arrived) or
+   * "not_arrived" (not seen yet). Either way the reservation stays used and the proposal stays
+   * unknown: a message that hasn't arrived may only be late or in spam, so releasing the slot could
+   * allow a second send. Writes OUTCOME_RESOLVED naming the owner and the observation.
    */
   async function resolveUnknown(dispatchId: string, resolution: "seen" | "not_arrived", owner: string): Promise<ResolveResult> {
     if (resolution !== "seen" && resolution !== "not_arrived") throw new TypeError("resolution must be seen or not_arrived");
@@ -733,16 +735,9 @@ export function createExecutor(deps: ExecutorDeps) {
         resolution,
         owner,
       ]);
-      if (resolution === "not_arrived") {
-        const released = await c.query("UPDATE jobs SET sends_reserved = sends_reserved - 1 WHERE id = $1 AND sends_reserved > 0", [
-          locked.job.id,
-        ]);
-        if (released.rowCount !== 1) throw new Error("resolveUnknown: no reservation to release");
-        await c.query("UPDATE proposals SET status = 'not_sent' WHERE id = $1", [locked.p.id]);
-      }
       const receipt_id = await writeReceipt(tx, "OUTCOME_RESOLVED", {
         ...receiptContext(locked),
-        detail: { dispatch: d.id, resolution: resolution === "seen" ? "sent" : "not_sent", source: "owner", resolved_by: owner },
+        detail: { dispatch: d.id, resolution: resolution === "seen" ? "sent" : "not_arrived", source: "owner", resolved_by: owner },
       });
       return { resolved: true, receipt_id };
     });

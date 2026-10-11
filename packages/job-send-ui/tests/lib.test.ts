@@ -94,10 +94,14 @@ describe("buildTimeline", () => {
     expect(buildTimeline([unknown])[0]).toMatchObject({ label: SAY.outcomeUnknown, control: "resolve", dispatchId: "d7", reason: "timeout" });
     const otherSend = r(6, "OUTCOME_RESOLVED", { proposal: "p2", version: 1, detail: { resolution: "sent" } });
     expect(buildTimeline([unknown, otherSend])[0]?.control).toBe("resolve"); // another send's resolution does not count
-    const resolved = r(7, "OUTCOME_RESOLVED", { proposal: "p1", version: 2, detail: { resolution: "not_sent" } });
+    const resolved = r(7, "OUTCOME_RESOLVED", { proposal: "p1", version: 2, detail: { resolution: "not_arrived" } });
     const rows = buildTimeline([unknown, resolved]);
     expect(rows[0]?.control).toBe("none");
-    expect(rows[1]?.label).toBe("You said it did not arrive");
+    expect(rows[1]?.label).toBe(SAY.resolvedNotArrived);
+    expect(SAY.resolvedNotArrived).toContain("still counts as a send");
+    // An older receipt says "not_sent" for the same observation.
+    const older = r(7, "OUTCOME_RESOLVED", { proposal: "p1", version: 2, detail: { resolution: "not_sent" } });
+    expect(buildTimeline([unknown, older])[1]?.label).toBe(SAY.resolvedNotArrived);
     const seen = r(8, "OUTCOME_RESOLVED", { proposal: "p1", version: 2, detail: { resolution: "sent" } });
     expect(buildTimeline([unknown, seen])[1]?.label).toBe("You saw it arrive");
     const noId = r(5, "OUTCOME_UNKNOWN", { proposal: "p1", version: 2, detail: { error_class: "timeout" } });
