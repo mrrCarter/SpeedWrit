@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Job, Receipt } from "../domain/types";
 import { useEngine, useEngineState } from "../engineContext";
+import { explain } from "../explain";
 import { Card, Chip, fmtTime, short, toneOfReceipt } from "./ui";
 
 /** Jobs, each with its Flight Recorder: every decision for that job, newest first. */
@@ -36,7 +37,7 @@ function JobCard({ job, open }: { job: Job; open: boolean }) {
     >
       {job.kind === "send" ? (
         <div className="grid g4">
-          <div className="stat"><b>{job.maxSends - job.sendsReserved} / {job.maxSends}</b><span>sends left</span></div>
+          <div className="stat"><b>{job.maxSends - job.sendsReserved} / {job.maxSends}</b><span>sends left</span><div className="meter"><div style={{ width: `${(100 * (job.maxSends - job.sendsReserved)) / job.maxSends}%` }} /></div></div>
           <div className="stat"><b style={{ fontSize: 14 }}>{job.recipient}</b><span>only recipient</span></div>
           <div className="stat"><b style={{ fontSize: 14 }}>{job.allowCustom ? "ask me" : "never"}</b><span>custom wording</span></div>
           <div className="stat"><b style={{ fontSize: 14 }}>{fmtTime(job.expiresAt)}</b><span>expires · {agent?.label ?? "?"} ({agent?.kind})</span></div>
@@ -69,11 +70,11 @@ function Timeline({ receipts }: { receipts: Receipt[] }) {
         return (
           <div key={r.seq} className={`tl-item ${toneOfReceipt(r.type)}`}>
             <div className="row">
-              <span className="faint">#{r.seq}</span>
-              <Chip tone={toneOfReceipt(r.type)}>{r.type}</Chip>
-              {r.reason && <code>{r.reason}</code>}
+              <span className="tl-icon" aria-hidden="true">{explain(r, s).icon}</span>
+              <b>{explain(r, s).title}</b>
+              <span className="faint" style={{ fontSize: 11 }}>#{r.seq} · {r.type}{r.reason ? ` · ${r.reason}` : ""}</span>
               {r.detail.injected === true && <Chip tone="unk">controlled test</Chip>}
-              {r.type === "PROPOSAL_DENIED" && <span className="faint">Gmail not called</span>}
+
               {r.type === "PROVIDER_ACCEPTED" && p?.kind === "send" && (witnessed ? <Chip tone="ok">delivery witnessed</Chip> : (
                 <button className="btn small ghost" onClick={() => void engine.witnessDelivery(p.id)}>delivery not witnessed · I see it in the inbox</button>
               ))}
@@ -84,7 +85,8 @@ function Timeline({ receipts }: { receipts: Receipt[] }) {
               <span className="faint">{fmtTime(Date.parse(r.ts))}</span>
               <button className="btn small ghost" onClick={() => setOpen(open === r.seq ? null : r.seq)}>{open === r.seq ? "hide" : "json"}</button>
             </div>
-            <div className="hash">prev {short(r.prevHash, 10)} → {short(r.hash, 10)}{r.versionHash ? ` · version ${short(r.versionHash, 10)}` : ""}</div>
+            <div className="muted" style={{ fontSize: 12.5 }}>{explain(r, s).detail}</div>
+            <div className="hash">signed · chained to the previous receipt · {short(r.hash, 10)}{r.versionHash ? ` · version ${short(r.versionHash, 10)}` : ""}</div>
             {open === r.seq && <pre className="mono-box" style={{ marginTop: 6 }}>{JSON.stringify(r, null, 2)}</pre>}
           </div>
         );

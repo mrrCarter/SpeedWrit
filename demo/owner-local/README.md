@@ -18,6 +18,8 @@ Node 22 or newer.
 
 The owner app's navigation, in its order: **Connections · New job · Waiting for you · Jobs · Verify**, plus a separate **Test lab**.
 
+For people watching: a **demo guide** strip ticks off the MVP story as it actually happens (Connect ChatGPT → Confirm a job → Agent sends → Wrong client refused → Held, then you approve → Check a receipt → STOP), with the next step and a Go button. A **What just happened** card states the latest decision in plain English ("Refused before Gmail: … Gmail was not called."). The Flight Recorder reads in plain words too, with the receipt type and code kept small.
+
 - **Connections:** Gmail account and scopes, a Gmail call counter, STOP sending and Reconnect. Agent connections show label, type (OAuth or fallback, never mixed up), MCP address, last used, and Revoke. Connect ChatGPT over OAuth (consent with Allow/Deny), or create a fallback secret connection URL, shown once, then hidden.
 - **New job:** one screen. Type the limits (`only email Dana` · `two sends max` · `expires tonight` · `ask me before custom wording`), see each line's rule and a live Never / Ask me / Runs without asking preview, then **Confirm job**. Near misses get a hint ("Expired tonight" → did you mean "expires tonight"?). Without the approval line, custom wording is refused rather than held. With no agent yet, a Connect ChatGPT button is right there.
 - **Waiting for you:** held versions with their diff, plus "Approving binds version vN · hash". A stale version is refused as superseded. An UNKNOWN outcome offers *I see it arrived* / *It did not arrive*. "Did not arrive" records the observation and keeps the send slot (#49159). Nothing resends.

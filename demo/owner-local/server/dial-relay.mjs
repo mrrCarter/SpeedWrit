@@ -25,7 +25,12 @@ const dial = live ? new DialClient({ apiKey: KEY }) : null;
 const mask = (n) => (n.length > 4 ? `•••${n.slice(-4)}` : n ? "•••" : "");
 
 const CATEGORIES = new Set(["ambiguous", "out_of_policy", "unusual", "test"]);
-const SPOKEN = { ambiguous: "needs your decision", out_of_policy: "was refused by policy", unusual: "was out of the ordinary", test: "is a test alert" };
+const SPOKEN = {
+  ambiguous: ["needs your decision", "need your decision"],
+  out_of_policy: ["was refused by policy", "were refused by policy"],
+  unusual: ["was out of the ordinary", "were out of the ordinary"],
+  test: ["is a test alert", "are test alerts"],
+};
 let pending = [];
 let timer = null;
 let lastCallAt = 0;
@@ -40,7 +45,8 @@ function summary(items) {
   return [...by.entries()]
     .map(([cat, labels]) => {
       const uniq = [...new Set(labels)].slice(0, 3);
-      return `${labels.length} ${labels.length === 1 ? "event" : "events"} ${SPOKEN[cat]}: ${uniq.join("; ")}`;
+      const one = labels.length === 1;
+      return `${labels.length} ${one ? "event" : "events"} ${SPOKEN[cat][one ? 0 : 1]}: ${uniq.join("; ")}`;
     })
     .join(". ");
 }
