@@ -10,10 +10,16 @@ import { gmailRaw } from "../render/mime.js";
 //   2xx with a message id         -> accepted
 //   400, 401, 403, 429            -> not_sent  (http_<status>)
 //   anything else: other statuses, a timeout, a reset, a network error, 2xx without an id -> unknown
-//   the access token cannot be had -> not_sent provider_auth (no request is made)
+//   the access token cannot be had, or not within GMAIL_TOKEN_TIMEOUT_MS -> not_sent provider_auth
+//     (no request is made)
 
 export const GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 export const GMAIL_TIMEOUT_MS = 20_000;
+/**
+ * The access token's budget. It must end before the executor's 20 s budget for the whole call,
+ * which calls a timeout UNKNOWN: with no request made yet, the honest answer is NOT SENT.
+ */
+export const GMAIL_TOKEN_TIMEOUT_MS = 10_000;
 const NOT_SENT_STATUSES = new Set([400, 401, 403, 429]);
 
 export interface GmailProviderOptions {
@@ -22,21 +28,32 @@ export interface GmailProviderOptions {
   /** Injected for tests; defaults to the global fetch. */
   fetch?: typeof fetch;
   timeoutMs?: number;
+  /** The access token's budget; default GMAIL_TOKEN_TIMEOUT_MS. */
+  tokenTimeoutMs?: number;
 }
 
 export function createGmailProvider(options: GmailProviderOptions): MailProvider {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? GMAIL_TIMEOUT_MS;
+  const tokenTimeoutMs = options.tokenTimeoutMs ?? GMAIL_TOKEN_TIMEOUT_MS;
 
   return {
     async send(bytes: Uint8Array): Promise<MailOutcome> {
       if (!(bytes instanceof Uint8Array)) throw new TypeError("MailProvider.send takes the stored MIME bytes");
       let token: string;
+      let timer: NodeJS.Timeout | undefined;
       try {
-        token = await options.accessToken();
+        token = await Promise.race([
+          options.accessToken(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("no token in time")), tokenTimeoutMs);
+          }),
+        ]);
         if (typeof token !== "string" || token === "") throw new Error("empty token");
       } catch {
         return { status: "not_sent", errorClass: "provider_auth" };
+      } finally {
+        clearTimeout(timer);
       }
 
       let response: Response;

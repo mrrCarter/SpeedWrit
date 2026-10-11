@@ -15,8 +15,9 @@ export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 /** An access token is reused until this many seconds before it expires. */
 export const ACCESS_TOKEN_MARGIN_SECONDS = 60;
 /**
- * The token endpoint's own budget, well inside the provider call's 20 s: a hung Google token
- * endpoint is then NOT SENT (no request was made), never UNKNOWN.
+ * The budget for one call to Google (token or revoke), the answer's body included. It sits well
+ * inside the provider call's 20 s, so a hung Google token endpoint is NOT SENT (no request was
+ * made), never UNKNOWN.
  */
 export const TOKEN_FETCH_TIMEOUT_MS = 8_000;
 
@@ -39,11 +40,34 @@ export type GmailTokensOptions = {
   tokenFetchTimeoutMs?: number;
 };
 
-const form = (fields: Record<string, string>) => ({
+const form = (fields: Record<string, string>, signal: AbortSignal) => ({
   method: "POST",
   headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
   body: new URLSearchParams(fields).toString(),
+  signal,
 });
+
+/**
+ * One call to Google, its answer's body included, within `ms`. At the deadline the request is
+ * aborted and the call fails `token_endpoint`, even for a fetch that ignores the signal.
+ */
+async function withinBudget<T>(ms: number, call: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new GmailTokenError("token_endpoint"));
+      controller.abort();
+    }, ms);
+  });
+  try {
+    return await Promise.race([call(controller.signal), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const jsonOf = (res: { json(): Promise<unknown> }) => res.json().catch(() => null) as Promise<Record<string, unknown> | null>;
 
 export function createGmailTokens(options: GmailTokensOptions) {
   const { pool, custody, google, fetchImpl } = options;
@@ -67,15 +91,11 @@ export function createGmailTokens(options: GmailTokensOptions) {
     if (cached && now() < cached.expiresAt - ACCESS_TOKEN_MARGIN_SECONDS) return cached.token;
     cache.delete(connectionId);
     const refreshToken = await refreshTokenOf(connectionId);
-    let timer: NodeJS.Timeout | undefined;
-    const timedOut = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new GmailTokenError("token_endpoint")), tokenFetchTimeoutMs);
+    const fields = { grant_type: "refresh_token", refresh_token: refreshToken, client_id: google.clientId, client_secret: google.clientSecret };
+    const { res, data } = await withinBudget(tokenFetchTimeoutMs, async (signal) => {
+      const res = await fetchImpl(GOOGLE_TOKEN_ENDPOINT, form(fields, signal));
+      return { res, data: await jsonOf(res) };
     });
-    const res = await Promise.race([
-      fetchImpl(GOOGLE_TOKEN_ENDPOINT, form({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: google.clientId, client_secret: google.clientSecret })),
-      timedOut,
-    ]).finally(() => clearTimeout(timer));
-    const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
     if (!res.ok) {
       if (res.status === 400 && data?.error === "invalid_grant") {
         await pool.query("UPDATE connections SET status = 'needs_reconnect' WHERE id = $1 AND status = 'active'", [connectionId]);
@@ -104,8 +124,12 @@ export function createGmailTokens(options: GmailTokensOptions) {
       if (error instanceof GmailTokenError) return { ok: true, status: "no_token" };
       throw error;
     }
-    const res = await fetchImpl(GOOGLE_REVOKE_ENDPOINT, form({ token: refreshToken }));
-    const data = res.ok ? null : ((await res.json().catch(() => null)) as Record<string, unknown> | null);
+    // A revoke Google doesn't answer in time throws; engageStop records it as not revoked, and the
+    // sealed token stays so the owner can retry.
+    const { res, data } = await withinBudget(tokenFetchTimeoutMs, async (signal) => {
+      const res = await fetchImpl(GOOGLE_REVOKE_ENDPOINT, form({ token: refreshToken }, signal));
+      return { res, data: res.ok ? null : await jsonOf(res) };
+    });
     const gone = res.ok || (res.status === 400 && data?.error === "invalid_token");
     if (gone) await pool.query("UPDATE connections SET refresh_token_enc = NULL WHERE id = $1", [connection.id]);
     return { ok: gone, status: res.status };

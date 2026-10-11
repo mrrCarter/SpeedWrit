@@ -31,7 +31,7 @@ export function googleClientConfigFromEnv(env: Record<string, string | undefined
 /** The slice of fetch this module uses. */
 export type FetchLike = (
   url: string,
-  init?: { method?: string; headers?: Record<string, string>; body?: string },
+  init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal },
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 /** RFC 7636 S256: base64url(sha256(verifier)). */
