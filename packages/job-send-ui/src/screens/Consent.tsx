@@ -1,6 +1,11 @@
 /** ChatGPT's connector callback (packages/job-send oauth CHATGPT_REDIRECT; a test pins the two together). */
 export const CHATGPT_CALLBACK = "https://chatgpt.com/connector_platform_oauth_redirect";
 const CHATGPT_PER_CONNECTION = /^https:\/\/chatgpt\.com\/connector\/oauth\/([A-Za-z0-9_-]{1,128})$/;
+/** Grok's connector callback on grok.com (oauth GROK_REDIRECT; a test pins them together). */
+export const GROK_CALLBACK = "https://grok.com/connectors-oauth-exchange-code/";
+/** The two callbacks Grok Bot registers (oauth GROK_BOT_REDIRECTS): Cursor's web callback, and a loopback one. */
+export const CURSOR_CALLBACK = "https://www.cursor.com/agents/mcp/oauth/callback";
+export const LOOPBACK_CALLBACK = "http://localhost:8787/callback";
 
 /** The only scope SpeedWrit grants (packages/job-send MCP_SCOPE). */
 export const CONSENT_SCOPE = "jobs.act";
@@ -29,6 +34,10 @@ export function describeRedirect(uri: string): { where: string; connection: stri
   if (uri === CHATGPT_CALLBACK) return { where: "ChatGPT", connection: null };
   const perConnection = CHATGPT_PER_CONNECTION.exec(uri);
   if (perConnection) return { where: "ChatGPT", connection: perConnection[1] ?? null };
+  if (uri === GROK_CALLBACK) return { where: "Grok (grok.com)", connection: null };
+  if (uri === CURSOR_CALLBACK) return { where: "Cursor's website (cursor.com)", connection: null };
+  // localhost is the computer this page is open on: the code goes to an app running there.
+  if (uri === LOOPBACK_CALLBACK) return { where: "An app on this computer", connection: null };
   return { where: "Another address", connection: null };
 }
 

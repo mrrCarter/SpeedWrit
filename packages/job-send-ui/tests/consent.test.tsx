@@ -1,8 +1,17 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { CHATGPT_REDIRECT, isAllowedRedirectUri, MCP_SCOPE } from "@writ/job-send";
+import { CHATGPT_REDIRECT, GROK_BOT_REDIRECTS, GROK_REDIRECT, isAllowedRedirectUri, MCP_SCOPE } from "@writ/job-send";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findNeverSay } from "../src/lib/copy";
-import { CHATGPT_CALLBACK, CONSENT_SCOPE, Consent, describeRedirect, type ConsentRequest } from "../src/screens/Consent";
+import {
+  CHATGPT_CALLBACK,
+  CONSENT_SCOPE,
+  CURSOR_CALLBACK,
+  Consent,
+  describeRedirect,
+  GROK_CALLBACK,
+  LOOPBACK_CALLBACK,
+  type ConsentRequest,
+} from "../src/screens/Consent";
 
 afterEach(cleanup);
 
@@ -70,9 +79,36 @@ describe("Consent", () => {
 });
 
 describe("describeRedirect agrees with the server's redirect allow-list", () => {
-  it("the UI's callback and scope are the server's", () => {
+  it("the UI's callbacks and scope are the server's", () => {
     expect(CHATGPT_CALLBACK).toBe(CHATGPT_REDIRECT);
+    expect(GROK_CALLBACK).toBe(GROK_REDIRECT);
+    expect([CURSOR_CALLBACK, LOOPBACK_CALLBACK]).toEqual([...GROK_BOT_REDIRECTS]);
     expect(CONSENT_SCOPE).toBe(MCP_SCOPE);
+  });
+
+  it("Grok's and Grok Bot's callbacks are named; their lookalikes are 'Another address'", () => {
+    expect(describeRedirect(GROK_REDIRECT).where).toBe("Grok (grok.com)");
+    expect(describeRedirect(CURSOR_CALLBACK).where).toBe("Cursor's website (cursor.com)");
+    expect(describeRedirect(LOOPBACK_CALLBACK).where).toBe("An app on this computer");
+    const cases = [
+      GROK_REDIRECT,
+      ...GROK_BOT_REDIRECTS,
+      "https://grok.com/connectors-oauth-exchange-code",
+      "https://grok.com.evil.example/connectors-oauth-exchange-code/",
+      "https://cursor.com/agents/mcp/oauth/callback",
+      "https://www.cursor.com/agents/mcp/oauth/callback/",
+      "http://localhost:8788/callback",
+      "http://127.0.0.1:8787/callback",
+      "https://localhost:8787/callback",
+    ];
+    for (const uri of cases) {
+      const named = describeRedirect(uri).where !== "Another address";
+      expect(named, uri).toBe(isAllowedRedirectUri(uri));
+    }
+    render(<Consent request={{ ...REQUEST, clientName: "Cursor", redirectUri: LOOPBACK_CALLBACK }} ownerEmail="owner@test.example" onAllow={vi.fn()} onDeny={vi.fn()} />);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain(`An app on this computer · ${LOOPBACK_CALLBACK}`);
+    expect(findNeverSay(text)).toEqual([]);
   });
 
   it("every address it calls ChatGPT, the server allows; lookalikes are 'Another address'", () => {
