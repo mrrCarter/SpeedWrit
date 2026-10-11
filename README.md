@@ -119,14 +119,3 @@ Gmail credentials and the signing key remain server-side. Connection setup inten
 | AI-reviewed, may miss | Protected, guaranteed |
 | One scripted run, our own test | Proven at scale |
 
-## Limits, honestly
-
-- The live acceptance run used ChatGPT; Grok support is merged but was not part of it.
-- Gmail send has no idempotency key and send-only cannot read the mailbox, so UNKNOWN is resolved by the owner, not by us.
-- AI review was not configured in the live run; held drafts show `ai_review_unavailable`. Approval is on screen.
-- Measurement: a manual baseline and one SpeedWrit scripted run producing the same two emails, with different operators (Ali and Carter), are planned; timings and savings are missing until they run, and any savings claim requires that measured baseline.
-- Not in this build: Cc, Bcc, attachments, HTML, links, inbox reading, delivery checks, risk scores, arbitrary policy generation.
-
-## Team
-
-Carter (lead; ship and connect), Ali (Gmail paths, Grok client), Aman (owner experience, stage, measurement), with Claude and Codex agents coordinating in a SentinelLayer room under a two-key review rule.
