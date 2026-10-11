@@ -48,7 +48,7 @@ ChatGPT / Grok ──propose_send──▶ /mcp ──▶ GATE (code checks, fix
 ```
 
 - **Gate order:** job exists for this connection → rate limit → job active → not expired → dispatch not stopped → exactly one recipient → recipient is the job's → send limit → fields within rules (length, single line, no control chars, no URL) → other-client mention → render → AI review (can only add a hold).
-- **Invariants the code keeps:** a version is immutable after insert; at most one approval and one dispatch per version (unique constraints); `sends_reserved` never exceeds `max_sends` (conditional update under lock); no receipt, no change; dispatch sends the stored MIME bytes, nothing is re-rendered.
+- **Invariants the code keeps:** a version is immutable after insert; at most one approval and one dispatch per version (unique constraints); `sends_reserved` never exceeds `max_sends` (conditional update under lock); each recorded job state change commits together with its receipt (unconfirmed drafts are not receipted); dispatch sends the stored MIME bytes, nothing is re-rendered.
 - **STOP** sets `dispatch_enabled = false` and records `STOP_ENGAGED`; it takes effect when that local transaction commits and blocks every reservation that starts afterwards. Revoking the Google token is then attempted separately and can fail. Nothing recalls an email already submitted.
 - **UNKNOWN** (timeout, reset, 5xx) keeps the reservation and does not automatically resend. The owner records whether they observed arrival ("I see it" / "It did not arrive"), with a receipt naming the owner as the source; the outcome remains UNKNOWN and the reservation stays consumed.
 - **AI review** reads only agent-written free text, runs after every code check passed and before any transaction opens, one attempt within a budget. `hold` and `unavailable` both add a review reason; `clear` changes nothing. It can never override a code denial or waive an approval.
@@ -67,7 +67,7 @@ OAuth per the MCP authorization spec: `/.well-known/oauth-protected-resource`, `
 npm run -w packages/grokbot build
 export SPEEDWRIT_MCP_URL=https://HOST/mcp              # set privately
 export XAI_API_KEY=...                                  # set privately; never commit it
-node packages/grokbot/dist/cli.js login                 # OAuth mode, first: the owner presses Allow once
+node packages/grokbot/dist/cli.js login                 # OAuth mode, first; the host must list http://127.0.0.1:8976/callback in REDIRECT_FALLBACKS (not built in). The owner presses Allow once
 node packages/grokbot/dist/cli.js doctor                # MCP initialize + tools/list, no model call
 node packages/grokbot/dist/cli.js ask "List my jobs only."
 ```
