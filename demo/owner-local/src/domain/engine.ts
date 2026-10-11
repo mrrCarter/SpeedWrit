@@ -514,9 +514,11 @@ export class Engine {
   }
 
   async reviseSend(proposalId: string, change: Pick<SendInput, "fields" | "custom" | "prompt">): Promise<AgentResult> {
+    let connectionId: string | undefined;
     const result = await this.lock(async (): Promise<AgentResult> => {
       const p = this.proposal(proposalId);
       if (!p || p.kind !== "send") return { status: "denied", reasonCode: "proposal_not_found", message: "Not revised. No such proposal." };
+      connectionId = this.job(p.jobId, "send")?.agentConnectionId;
       if (p.status !== "pending_approval") return { status: "denied", reasonCode: "not_pending", message: "Not revised. That proposal is no longer waiting for approval." };
       const job = this.job(p.jobId, "send") as SendJob;
       const old = p.versions[p.currentVersion - 1] as SendVersion;
@@ -531,7 +533,7 @@ export class Engine {
       this.commit();
       return { status: "pending_approval", message: `Not sent yet. Version ${next.n} is waiting for the owner's approval.`, proposalId: p.id, version: next.n, versionHash: next.hash, reviewReasons: next.reviewReasons, receiptSeq: r.seq };
     });
-    return this.log("revise_proposal", `${proposalId} → ${change.custom ? "custom wording" : "fields"}`, result, { before: this.s.providerCalls, prompt: change.prompt });
+    return this.log("revise_proposal", `${proposalId} → ${change.custom ? "custom wording" : "fields"}`, result, { connectionId, before: this.s.providerCalls, prompt: change.prompt });
   }
 
   private async reserveSend(job: SendJob, p: SendProposal, v: SendVersion, via: "auto" | "owner"): Promise<Dispatch> {
