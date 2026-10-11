@@ -32,7 +32,7 @@ The Azure templates target an existing resource group in two stages:
 | Template | Inputs and result |
 | --- | --- |
 | [azure-infra.bicep](azure-infra.bicep) | `location`, `prefix`, `databaseAdminLogin`, and secure `databasePassword`. Creates the VNet, private PostgreSQL 16 database/DNS, Basic container registry, image-pull identity/AcrPull assignment, and Container Apps environment. Registry admin authentication and PostgreSQL public access are disabled. |
-| [azure-app.bicep](azure-app.bicep) | Infra outputs `environmentId`, `environmentDomain`, `registryServer`, `pullIdentityId`; published `image`; `googleClientId`; nonempty `demoRecipients`; optional `location`, `appName`, `ownerAppContacts`, and `jobPurpose`. Secure inputs are `databaseUrl`, `googleClientSecret`, `receiptSigningKey`, and `custodyKey`. Creates one HTTPS app with one replica and runtime secret references. |
+| [azure-app.bicep](azure-app.bicep) | Infra outputs `environmentId`, `environmentDomain`, `registryServer`, `pullIdentityId`; published `image`; `googleClientId`; nonempty `demoRecipients`; optional `location`, `appName`, `ownerAppContacts`, `jobPurpose`, `secretPathFallback`, and `redirectFallbacks`. Secure inputs are `databaseUrl`, `googleClientSecret`, `receiptSigningKey`, and `custodyKey`. Creates one HTTPS app with one replica and runtime secret references. |
 
 Infra also returns `registryName`, `databaseHost`, and `databaseName`. Publish the image to that registry before deploying the app. Construct the private `databaseUrl` for those database outputs with `sslmode=verify-full` and correctly encoded credentials. `custodyKey` is 32 random bytes encoded as base64; `receiptSigningKey` must be the key used for the browser build. Store private deployment parameter files outside the repository; `@secure()` does not encrypt a local parameter file. Neither template outputs credentials. App outputs are `host` and `appId`.
 
@@ -41,7 +41,7 @@ The app computes `HOST` as `https://<appName>.<environmentDomain>`. Configure th
 - `HOST/auth/google/callback`
 - `HOST/auth/gmail/callback`
 
-Enable sign-in scopes `openid email` and Gmail's `https://www.googleapis.com/auth/gmail.send`; add each human as a consent-screen test user. Connect ChatGPT to `HOST/mcp` using OAuth. Secret-path fallback is off in the Azure template.
+Enable sign-in scopes `openid email` and Gmail's `https://www.googleapis.com/auth/gmail.send`; add each human as a consent-screen test user. Connect ChatGPT to `HOST/mcp` using OAuth. `secretPathFallback` defaults to `off` and accepts only `off` or `on`; use `on` only for the agreed fallback flow. Secret-path URLs are credentials and stay out of logs, screenshots, and the repository. `redirectFallbacks` defaults to empty and accepts comma-separated exact callback URIs through the service's existing allowlist. For a separately authorized local Grok client, its callback is `http://127.0.0.1:8976/callback`; enable that value only when that client is needed.
 
 Set `demoRecipients` to comma-separated owned test inboxes. It becomes the executor's `DEMO_RECIPIENTS` allowlist, in addition to each job's single-recipient restriction. The template requires a nonempty value; the service itself disables this allowlist for a blank value. Stage contacts are separate: `ownerAppContacts` supplies `OWNER_APP_CONTACTS` as a JSON array of `{ "name", "email", "company"? }` and defaults to an empty list. Coordinate that input with the stage seed owner before confirming the two-send demo job.
 
