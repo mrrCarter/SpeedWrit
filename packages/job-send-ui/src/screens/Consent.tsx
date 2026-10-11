@@ -2,7 +2,7 @@
 export const CHATGPT_CALLBACK = "https://chatgpt.com/connector_platform_oauth_redirect";
 const CHATGPT_PER_CONNECTION = /^https:\/\/chatgpt\.com\/connector\/oauth\/([A-Za-z0-9_-]{1,128})$/;
 
-/** The only scope WRIT grants (packages/job-send MCP_SCOPE). */
+/** The only scope SpeedWrit grants (packages/job-send MCP_SCOPE). */
 export const CONSENT_SCOPE = "jobs.act";
 
 /** The authorize request as checkAuthorizeRequest accepted it. The screen shows it and posts back exactly it. */
@@ -37,7 +37,7 @@ function ConsentDetails({ clientName, redirectUri, ownerEmail }: { clientName: s
   const target = describeRedirect(redirectUri);
   return (
     <>
-      <h2>Connect an agent to WRIT</h2>
+      <h2>Connect an agent to SpeedWrit</h2>
       <p>
         {/* <bdi> isolates the declared name: a direction override inside it cannot reorder "(declared)" (machine, #512). */}
         <strong>
@@ -63,7 +63,7 @@ function ConsentDetails({ clientName, redirectUri, ownerEmail }: { clientName: s
   );
 }
 
-const NOT_GRANTABLE = "This request asks for something WRIT does not grant.";
+const NOT_GRANTABLE = "This request asks for something SpeedWrit does not grant.";
 
 /**
  * The owner's consent screen for /oauth/authorize (spec: "OAuth contract"). The server has already checked the

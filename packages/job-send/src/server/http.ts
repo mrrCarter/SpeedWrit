@@ -269,7 +269,7 @@ export function createJobSendHandler(options: JobSendHttpOptions): (req: Incomin
 
   async function answerConsent(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const origin = req.headers.origin;
-    if (origin !== undefined && origin !== host) return page(res, 403, "This answer did not come from the WRIT consent page.");
+    if (origin !== undefined && origin !== host) return page(res, 403, "This answer did not come from the SpeedWrit consent page.");
     if (mediaType(req) !== "application/x-www-form-urlencoded") return page(res, 400, "This answer is not valid. Start again from your agent.");
     const form = singleParams(new URLSearchParams(await readBody(req, OAUTH_BODY_LIMIT)));
     if (!form || form.request_id === undefined || (form.decision !== "allow" && form.decision !== "deny")) {
@@ -401,7 +401,7 @@ export function createJobSendHandler(options: JobSendHttpOptions): (req: Incomin
       if (error instanceof HttpError) throw error;
       return send(res, 400, { jsonrpc: "2.0", error: { code: ErrorCode.ParseError, message: "Parse error" }, id: null });
     }
-    const server = new Server({ name: "writ-job-send", version: "0.1.0" }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
+    const server = new Server({ name: "speedwrit", version: "0.1.0" }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
     server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: LISTED_TOOLS }));
     server.setRequestHandler(CallToolRequestSchema, async (request) => callTool(request.params.name, request.params.arguments, conn));
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

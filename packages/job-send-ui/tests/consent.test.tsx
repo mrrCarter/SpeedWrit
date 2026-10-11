@@ -57,7 +57,7 @@ describe("Consent", () => {
     for (const scope of ["jobs.act openid", "openid", "", "JOBS.ACT"]) {
       render(<Consent request={{ ...REQUEST, scope }} ownerEmail="owner@test.example" onAllow={vi.fn()} onDeny={vi.fn()} />);
       expect(screen.queryByRole("button", { name: "Allow" })).toBeNull();
-      expect(screen.getByRole("alert").textContent).toBe("This request asks for something WRIT does not grant.");
+      expect(screen.getByRole("alert").textContent).toBe("This request asks for something SpeedWrit does not grant.");
       expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
       cleanup();
     }

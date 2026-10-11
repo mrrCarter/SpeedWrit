@@ -109,7 +109,7 @@ export const MCP_TOOLS: readonly McpToolDefinition[] = Object.freeze([
 
 /** The server instructions, as the spec writes them. The first 512 characters stand alone. */
 export const MCP_INSTRUCTIONS =
-  "WRIT sends email only inside jobs the owner confirmed. Call list_jobs first. Use propose_send for " +
+  "SpeedWrit sends email only inside jobs the owner confirmed. Call list_jobs first. Use propose_send for " +
   'every message. An email went out only if the result says status "sent". If status is "denied", do not ' +
   "retry with another recipient or wording; tell the user which rule stopped it. If status is " +
   '"pending_approval", say it is waiting for the owner and check get_status later. If status is "unknown", ' +

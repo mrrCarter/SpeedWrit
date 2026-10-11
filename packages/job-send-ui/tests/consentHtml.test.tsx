@@ -30,7 +30,7 @@ describe("renderConsentHtml", () => {
     expect(html.startsWith("<!doctype html><html lang=\"en\">")).toBe(true);
     const doc = parse(html);
     expect(doc.querySelector("meta[charset]")?.getAttribute("charset")).toBe("utf-8");
-    expect(doc.title).toBe("Connect an agent to WRIT");
+    expect(doc.title).toBe("Connect an agent to SpeedWrit");
     const forms = doc.querySelectorAll("form");
     expect(forms).toHaveLength(1);
     expect(forms[0]?.getAttribute("method")).toBe("post");
@@ -54,7 +54,7 @@ describe("renderConsentHtml", () => {
       ["request_id", VIEW.requestId, "hidden"],
       ["decision", "deny", "submit"],
     ]);
-    expect(doc.querySelector("[role=alert]")?.textContent).toBe("This request asks for something WRIT does not grant.");
+    expect(doc.querySelector("[role=alert]")?.textContent).toBe("This request asks for something SpeedWrit does not grant.");
   });
 
   it("shows what Consent shows: the declared name, the owner, ChatGPT's connection id, the exact address, isolated", () => {

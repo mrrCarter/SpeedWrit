@@ -22,7 +22,7 @@ let port = 0;
 
 beforeAll(async () => {
   mkdirSync(DIR, { recursive: true });
-  writeFileSync(resolve(DIR, "index.html"), "<!doctype html><title>WRIT</title>");
+  writeFileSync(resolve(DIR, "index.html"), "<!doctype html><title>SpeedWrit</title>");
   writeFileSync(resolve(DIR, "app.js"), "export const app = 1;");
   writeFileSync(resolve(DIR, RECEIPT_KEY_FILE), JSON.stringify({ key_id: KEY_ID, public_key_b64url: "x" }));
   const handle = serveOwnerApp({ dir: DIR, config: CONFIG, receiptKeyId: KEY_ID });
@@ -102,7 +102,7 @@ describe("serveOwnerApp", () => {
   it("serves the page, the script and the config, each with its type, under the app's CSP", async () => {
     const page = await call("GET", "/owner-app/");
     expect(page.status).toBe(200);
-    expect(page.body).toBe("<!doctype html><title>WRIT</title>");
+    expect(page.body).toBe("<!doctype html><title>SpeedWrit</title>");
     expect(page.headers["content-type"]).toBe("text/html; charset=utf-8");
     expect(page.headers["content-security-policy"]).toBe(OWNER_APP_CSP);
     expect(page.headers["x-content-type-options"]).toBe("nosniff");

@@ -21,7 +21,7 @@ export const SAY = {
 } as const;
 
 /**
- * Phrases no owner screen may render: each claims more than WRIT can know ("Delivered", "tamper-proof"), or names
+ * Phrases no owner screen may render: each claims more than SpeedWrit can know ("Delivered", "tamper-proof"), or names
  * the AI-review vendor instead of saying "AI review".
  */
 export const NEVER_SAY = [

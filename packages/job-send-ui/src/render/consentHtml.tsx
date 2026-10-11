@@ -15,7 +15,7 @@ export function renderConsentHtml(view: ConsentView): string {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Connect an agent to WRIT</title>
+        <title>Connect an agent to SpeedWrit</title>
       </head>
       <body>
         <main>

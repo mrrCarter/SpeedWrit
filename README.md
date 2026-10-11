@@ -1,4 +1,4 @@
-# WRIT
+# SpeedWrit
 
 Job-bound sending for AI agents. An agent (ChatGPT, over MCP) sends email for its owner only inside a **job**: a work order with one recipient, a send limit and an expiry, which the owner confirms once.
 
