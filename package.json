@@ -5,11 +5,12 @@
   "workspaces": [
     "packages/job-send",
     "packages/job-send-ui",
-    "packages/job-send-app"
+    "packages/job-send-app",
+    "packages/grokbot"
   ],
   "scripts": {
-    "typecheck": "npm run -w packages/job-send typecheck --if-present && npm run -w packages/job-send-ui typecheck --if-present && npm run -w packages/job-send-app typecheck --if-present",
-    "test": "npm run -w packages/job-send test --if-present && npm run -w packages/job-send-ui test --if-present && npm run -w packages/job-send-app test --if-present",
+    "typecheck": "npm run -w packages/job-send typecheck --if-present && npm run -w packages/job-send-ui typecheck --if-present && npm run -w packages/job-send-app typecheck --if-present && npm run -w packages/grokbot typecheck --if-present",
+    "test": "npm run -w packages/job-send test --if-present && npm run -w packages/job-send-ui test --if-present && npm run -w packages/job-send-app test --if-present && npm run -w packages/grokbot test --if-present",
     "build": "npm run -w packages/job-send build && npm run -w packages/job-send-app build"
   },
   "engines": {
