@@ -1,0 +1,23 @@
+{
+  "name": "speedwrit",
+  "private": true,
+  "description": "WRIT: job-bound sending for AI agents. An agent may email only inside a job its owner approved; signed receipts prove every decision.",
+  "workspaces": [
+    "packages/job-send",
+    "packages/job-send-ui",
+    "packages/job-send-app"
+  ],
+  "scripts": {
+    "typecheck": "npm run -w packages/job-send typecheck --if-present && npm run -w packages/job-send-ui typecheck --if-present && npm run -w packages/job-send-app typecheck --if-present",
+    "test": "npm run -w packages/job-send test --if-present && npm run -w packages/job-send-ui test --if-present && npm run -w packages/job-send-app test --if-present",
+    "build": "npm run -w packages/job-send build && npm run -w packages/job-send-app build"
+  },
+  "engines": {
+    "node": ">=20.9 <25",
+    "npm": ">=11 <12"
+  },
+  "overrides": {
+    "lodash": "4.18.1",
+    "ws": "8.21.0"
+  }
+}

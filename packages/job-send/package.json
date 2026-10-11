@@ -1,0 +1,46 @@
+{
+  "name": "@writ/job-send",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./contract": {
+      "types": "./dist/contract/index.d.ts",
+      "default": "./dist/contract/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./verify": {
+      "types": "./dist/receipts/verify/index.d.ts",
+      "default": "./dist/receipts/verify/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/executor/db/migrations"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "lint": "tsc --noEmit --project tsconfig.json",
+    "build": "tsc --project tsconfig.json",
+    "test": "npm run build && node --test \"tests/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@types/node": "24.7.1",
+    "@types/pg": "8.23.1",
+    "embedded-postgres": "17.10.0-beta.17",
+    "typescript": "5.9.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "pg": "8.23.0"
+  }
+}

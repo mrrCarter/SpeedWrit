@@ -1,0 +1,37 @@
+{
+  "name": "@writ/job-send-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./consent-html": "./src/render/consentHtml.tsx",
+    "./serve": "./src/serve/ownerApp.ts"
+  },
+  "scripts": {
+    "typecheck": "npm run build --workspace=@writ/job-send && tsc --noEmit --project tsconfig.json",
+    "lint": "npm run build --workspace=@writ/job-send && tsc --noEmit --project tsconfig.json",
+    "test": "npm run build --workspace=@writ/job-send && vitest run",
+    "build:app": "npm run build --workspace=@writ/job-send && node scripts/build-owner-app.mjs"
+  },
+  "dependencies": {
+    "@writ/job-send": "0.1.0"
+  },
+  "peerDependencies": {
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.3.0",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.1.0",
+    "esbuild": "0.28.1",
+    "jsdom": "26.1.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "typescript": "5.9.2",
+    "vitest": "4.1.6"
+  }
+}

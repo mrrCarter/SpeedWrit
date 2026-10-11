@@ -1,0 +1,107 @@
+// Job-bound sending: an agent sends email only inside a job its owner confirmed.
+// Each lane adds its modules under src/ and re-exports them here.
+export const PACKAGE_NAME = "@writ/job-send";
+
+export {
+  aiReview,
+  reviewReasons,
+  DEFAULT_HOLD_AT,
+  FLAGS,
+  QUESTIONS,
+  type Flag,
+  type Review,
+  type ReviewInput,
+  type ReviewOptions,
+} from "./ai-review/provider.js";
+export {
+  scoreCalibration,
+  formatCalibrationReport,
+  type Sample,
+  type SampleResult,
+  type QuestionScore,
+  type CalibrationReport,
+} from "./ai-review/calibration.js";
+export {
+  NEVER_REASONS,
+  ASK_ME_BASE_REASONS,
+  ASK_ME_REASONS,
+  isAskMeReason,
+  isNeverReason,
+  DISPATCH_REFUSALS,
+  reasonClass,
+  agentSentence,
+  type NeverReason,
+  type AskMeReason,
+  type AiReviewReason,
+  type ReasonCode,
+  type DispatchRefusal,
+} from "./contract/reasons.js";
+export {
+  RECEIPT_TYPES,
+  type Provider,
+  type MailOutcome,
+  type MailProvider,
+  type FieldRule,
+  type Job,
+  type JobStatus,
+  type ConnectionStatus,
+  type ProposalStatus,
+  type VersionState,
+  type DispatchStatus,
+  type ProposeSendCall,
+  type ReviseCall,
+  type StatusResult,
+  type JobListing,
+  type AgentConnection,
+  type SendResult,
+  type DispatchOutcome,
+  type ReceiptType,
+  type ReceiptValue,
+  type ReceiptFields,
+  type Tx,
+  type JobSendCore,
+} from "./contract/types.js";
+export * from "./executor/index.js";
+export {
+  checkCall,
+  normalizeRecipient,
+  mentionsAny,
+  FORBIDDEN_CHARACTERS,
+  CUSTOM_SUBJECT_MAX,
+  CUSTOM_BODY_MAX,
+  type GateDenial,
+  type GatePass,
+  type GateCheckContext,
+} from "./gate/checks.js";
+export { MCP_TOOLS, MCP_INSTRUCTIONS, MCP_SCOPE, type McpToolDefinition, type JsonSchemaObject, type ToolAnnotations } from "./mcp/tools.js";
+export { argumentProblem, SCHEMA_KEYWORDS } from "./mcp/arguments.js";
+export { sendToolResult, statusToolResult, listJobsToolResult, holdReasonWords, type McpToolResult } from "./mcp/results.js";
+export {
+  ACCESS_TOKEN_TTL_SECONDS,
+  REFRESH_TOKEN_TTL_SECONDS,
+  AUTHORIZATION_CODE_TTL_SECONDS,
+  CHATGPT_REDIRECT,
+  assertOrigin,
+  oauthMetadata,
+  unauthorizedChallenge,
+  generateOpaqueToken,
+  hashToken,
+  verifyPkceS256,
+  isAllowedRedirectUri,
+  checkRegistration,
+  checkAuthorizeRequest,
+  authorizationRedirect,
+  checkTokenRequest,
+  checkAccessToken,
+  TOKEN_CONSUME_SQL,
+  type OAuthMetadata,
+  type OAuthError,
+  type Refusal,
+  type RegisteredClient,
+  type AuthorizeRequest,
+  type StoredCode,
+  type StoredRefresh,
+  type StoredAccess,
+  type TokenGrant,
+  type GrantRevocation,
+} from "./oauth/oauth.js";

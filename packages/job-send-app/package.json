@@ -1,0 +1,23 @@
+{
+  "name": "@writ/job-send-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "npm run build --workspace=@writ/job-send && tsc --noEmit --project tsconfig.json",
+    "lint": "npm run build --workspace=@writ/job-send && tsc --noEmit --project tsconfig.json",
+    "build": "npm run build --workspace=@writ/job-send && node scripts/build.mjs",
+    "test": "npm run build && node --test \"tests/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "@writ/job-send": "0.1.0",
+    "@writ/job-send-ui": "0.1.0",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.7.1",
+    "@types/pg": "8.23.1",
+    "esbuild": "0.28.1",
+    "typescript": "5.9.2"
+  }
+}
