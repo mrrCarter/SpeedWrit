@@ -39,6 +39,8 @@ export function App() {
   return (
     <>
       <header className="top">
+        {/* Always shown: this is a synthetic rehearsal, and a screenshot of it must never pass for the live product. */}
+        <div className="banner-sim" role="note"><div><b>LOCAL SIMULATION</b> · synthetic data, not the live product. No email is sent and no network call is made.</div></div>
         <div className="top-row">
           <a className="brand" href="#connections" aria-label="SpeedWrit home" onClick={() => setTab("connections")}>
             <Logo height={62} />
