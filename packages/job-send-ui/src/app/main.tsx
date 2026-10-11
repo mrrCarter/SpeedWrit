@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import { OwnerApi } from "./api";
 import type { OwnerAppConfig } from "./config";
 import { OwnerApp } from "./OwnerApp";
+import { OwnerAppBootstrap } from "./OwnerAppBootstrap";
 
 declare const __RECEIPT_KEY_ID__: string;
 declare const __RECEIPT_PUBLIC_KEY_B64URL__: string;
@@ -43,9 +44,5 @@ function Root({ config }: { config: OwnerAppConfig }) {
   );
 }
 
-void fetch("/owner-app/config.json", { credentials: "same-origin", headers: { accept: "application/json" } })
-  .then((res) => (res.ok ? (res.json() as Promise<OwnerAppConfig>) : Promise.reject(new Error(`config ${res.status}`))))
-  .then((config) => {
-    const root = document.getElementById("root");
-    if (root) createRoot(root).render(<Root config={config} />);
-  });
+const root = document.getElementById("root");
+if (root) createRoot(root).render(<OwnerAppBootstrap>{(config) => <Root config={config} />}</OwnerAppBootstrap>);
