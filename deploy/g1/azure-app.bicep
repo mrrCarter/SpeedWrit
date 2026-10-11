@@ -27,6 +27,10 @@ param receiptSigningKey string
 param custodyKey string
 
 var host = 'https://${appName}.${environmentDomain}'
+// Blank-after-trim configuration must fail deployment, not disable the demo allowlist.
+var ownedDemoRecipients = empty(trim(demoRecipients))
+  ? fail('demoRecipients must contain owned test inboxes')
+  : trim(demoRecipients)
 
 resource app 'Microsoft.App/containerApps@2025-01-01' = {
   name: appName
@@ -65,7 +69,7 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
           { name: 'DATABASE_URL', secretRef: 'database-url' }
           { name: 'RECEIPT_SIGNING_KEY', secretRef: 'receipt-signing-key' }
           { name: 'CUSTODY_KEY', secretRef: 'custody-key' }
-          { name: 'DEMO_RECIPIENTS', value: demoRecipients }
+          { name: 'DEMO_RECIPIENTS', value: ownedDemoRecipients }
           { name: 'OWNER_APP_CONTACTS', value: ownerAppContacts }
           { name: 'JOB_PURPOSE', value: jobPurpose }
           { name: 'SECRET_PATH_FALLBACK', value: secretPathFallback }
