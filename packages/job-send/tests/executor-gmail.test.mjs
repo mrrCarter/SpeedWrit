@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { GMAIL_SEND_URL, GMAIL_TIMEOUT_MS, createGmailProvider, gmailRaw } from "../dist/index.js";
+import { GMAIL_SEND_URL, GMAIL_TIMEOUT_MS, GMAIL_TOKEN_TIMEOUT_MS, PROVIDER_TIMEOUT_MS, createGmailProvider, gmailRaw } from "../dist/index.js";
+import { TOKEN_FETCH_TIMEOUT_MS } from "../dist/server/index.js";
 
 // No network: every test injects fetch.
 const MIME = new TextEncoder().encode("From: owner@example.com\r\nTo: dana@test.example\r\nSubject: Hi\r\n\r\nSGk=\r\n");
@@ -95,6 +96,17 @@ test("gmail: no access token means NOT SENT provider_auth and no request at all"
     assert.deepEqual(await gmail.send(MIME), { status: "not_sent", errorClass: "provider_auth" });
     assert.equal(fake.calls.length, 0);
   }
+});
+
+test("gmail: an access token that doesn't come in time is NOT SENT, and no request is made", { timeout: 5_000 }, async () => {
+  const fake = fakeFetch(() => new Response(JSON.stringify({ id: "m1" }), { status: 200 }));
+  const gmail = createGmailProvider({ accessToken: () => new Promise(() => {}), fetch: fake.fetch, tokenTimeoutMs: 30 });
+  assert.deepEqual(await gmail.send(MIME), { status: "not_sent", errorClass: "provider_auth" });
+  assert.equal(fake.calls.length, 0);
+  // The budgets nest: Google's token call ends inside the token's budget, and the token's ends
+  // inside the executor's budget for the whole call (whose timeout is UNKNOWN).
+  assert.ok(TOKEN_FETCH_TIMEOUT_MS < GMAIL_TOKEN_TIMEOUT_MS, "Google's token call ends inside the token budget");
+  assert.ok(GMAIL_TOKEN_TIMEOUT_MS < PROVIDER_TIMEOUT_MS, "the token budget ends before the executor calls the send UNKNOWN");
 });
 
 test("gmail: the token never appears in an outcome", async () => {

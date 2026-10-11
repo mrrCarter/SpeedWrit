@@ -28,5 +28,5 @@ export {
   type StoredVersion,
 } from "./dispatch.js";
 export { JOB_RECORD_SQL, authorityOf, authoritySha256, isoSeconds, type JobRecord } from "./jobs.js";
-export { GMAIL_SEND_URL, GMAIL_TIMEOUT_MS, createGmailProvider, type GmailProviderOptions } from "./providers/gmail.js";
+export { GMAIL_SEND_URL, GMAIL_TIMEOUT_MS, GMAIL_TOKEN_TIMEOUT_MS, createGmailProvider, type GmailProviderOptions } from "./providers/gmail.js";
 export { DEMO_RECAP_TEMPLATE, ensureSharedTemplate, type SharedTemplate } from "./templates.js";

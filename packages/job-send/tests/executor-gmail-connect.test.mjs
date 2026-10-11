@@ -46,18 +46,21 @@ function idToken(claims) {
 
 /** A fake Google token and revoke endpoint. `answer` shapes the next code exchange. */
 function fakeGoogle() {
-  const google = { calls: [], revoked: [], answer: {}, refreshFails: false, refreshHangs: false, nonces: new Map() };
+  const google = { calls: [], revoked: [], answer: {}, refreshFails: false, refreshHangs: false, refreshBodyHangs: false, revokeHangs: false, nonces: new Map() };
   google.fetchImpl = async (url, init) => {
     const form = new URLSearchParams(init?.body ?? "");
-    google.calls.push({ url, form: Object.fromEntries(form) });
+    google.calls.push({ url, form: Object.fromEntries(form), signal: init?.signal });
     const json = (status, value) => ({ ok: status < 300, status, json: async () => value });
     if (url === GOOGLE_REVOKE_ENDPOINT) {
+      if (google.revokeHangs) return new Promise(() => {});
       google.revoked.push(form.get("token"));
       return json(200, {});
     }
     if (url !== GOOGLE_TOKEN_ENDPOINT) return json(404, {});
     if (form.get("grant_type") === "refresh_token") {
       if (google.refreshHangs) return new Promise(() => {});
+      // The status line arrives and the body never does.
+      if (google.refreshBodyHangs) return { ok: true, status: 200, json: () => new Promise(() => {}) };
       if (google.refreshFails) return json(400, { error: "invalid_grant" });
       return json(200, { access_token: `at-${google.calls.length}`, expires_in: 3600 });
     }
@@ -285,5 +288,28 @@ test("a hung token endpoint is NOT SENT, never UNKNOWN; pending connects expire 
     assert.deepEqual(outcome, { status: "not_sent", errorClass: "provider_auth" }, "no request was made, so nothing was sent");
   } finally {
     await live.close();
+  }
+});
+
+test("a token answer whose body stalls, and a revoke Google never answers, end within the budget", { timeout: 10_000 }, async () => {
+  const app = await start();
+  try {
+    await app.finish(await app.begin(), { code: "c-stall" });
+    const [row] = await gmailRows(app.seed.owner);
+    const tokens = createGmailTokens({ pool: db.pool, custody, google: GOOGLE, fetchImpl: app.google.fetchImpl, tokenFetchTimeoutMs: 50 });
+
+    app.google.refreshBodyHangs = true;
+    await assert.rejects(tokens.accessToken(row.id), (error) => error instanceof GmailTokenError && error.reason === "token_endpoint");
+    const refresh = app.google.calls.at(-1);
+    assert.equal(refresh.form.grant_type, "refresh_token");
+    assert.equal(refresh.signal?.aborted, true, "the stalled request is aborted, not left open");
+
+    app.google.revokeHangs = true;
+    await assert.rejects(tokens.revoke({ id: row.id, provider: "gmail", account_email: row.account_email }), GmailTokenError);
+    assert.equal(app.google.calls.at(-1).signal?.aborted, true);
+    const [kept] = await gmailRows(app.seed.owner);
+    assert.ok(kept.refresh_token_enc, "a revoke that didn't happen keeps the sealed token, so the owner can retry");
+  } finally {
+    await app.close();
   }
 });
