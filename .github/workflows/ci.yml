@@ -31,3 +31,5 @@ jobs:
         run: npx -y npm@11.6.1 run typecheck
       - name: test
         run: npx -y npm@11.6.1 test
+      - name: measurement report tests
+        run: node --test scripts/measurement-report.test.mjs

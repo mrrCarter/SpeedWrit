@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "arms": [
+    {
+      "id": "N1",
+      "authorizedSlots": null,
+      "attentionSeconds": {
+        "setup": null,
+        "review": null,
+        "exceptions": null,
+        "cleanup": null
+      },
+      "confirmationClicks": {
+        "client": null,
+        "owner": null
+      },
+      "cases": [
+        {
+          "id": "routine-1",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-2",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-3",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-4",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "wrong-client",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "custom-wording",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        }
+      ]
+    },
+    {
+      "id": "N2",
+      "authorizedSlots": null,
+      "attentionSeconds": {
+        "setup": null,
+        "review": null,
+        "exceptions": null,
+        "cleanup": null
+      },
+      "confirmationClicks": {
+        "client": null,
+        "owner": null
+      },
+      "cases": [
+        {
+          "id": "routine-1",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-2",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-3",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-4",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "wrong-client",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "custom-wording",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        }
+      ]
+    },
+    {
+      "id": "A",
+      "authorizedSlots": null,
+      "attentionSeconds": {
+        "setup": null,
+        "review": null,
+        "exceptions": null,
+        "cleanup": null
+      },
+      "confirmationClicks": {
+        "client": null,
+        "owner": null
+      },
+      "cases": [
+        {
+          "id": "routine-1",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-2",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-3",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "routine-4",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "wrong-client",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        },
+        {
+          "id": "custom-wording",
+          "providerAccepted": null,
+          "deliveryWitnessed": null,
+          "outcome": null,
+          "falseHolds": null,
+          "duplicateApprovals": null,
+          "evidenceRef": null
+        }
+      ]
+    }
+  ]
+}
