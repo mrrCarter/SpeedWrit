@@ -142,3 +142,22 @@ input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
 textarea.mono-box { color: var(--ink); }
 select.btn option { background: var(--panel); color: var(--ink); }
 ::selection { background: rgba(226,191,116,.35); }
+
+/* ── explainers ───────────────────────────────────── */
+.guide { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); padding: 10px 12px; margin-bottom: 12px; }
+.guide-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.guide-step { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-strong); background: var(--raise); color: var(--muted); border-radius: 99px; padding: 4px 11px 4px 5px; cursor: pointer; font-size: 12px; }
+.guide-step .guide-num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 99px; background: var(--sunk); color: var(--muted); font-size: 11px; }
+.guide-step.done { color: var(--ok); border-color: rgba(95,211,154,.35); }
+.guide-step.done .guide-num { background: var(--ok-bg); color: var(--ok); }
+.guide-step.next { color: var(--on-accent); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+.guide-step.next .guide-num { background: rgba(0,0,0,.18); color: var(--on-accent); }
+.guide-foot { margin-top: 8px; font-size: 12.5px; }
+.guide-show { margin-bottom: 10px; }
+.happened { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--radius); background: var(--panel); padding: 10px 14px; margin-bottom: 14px; }
+.happened.ok { border-left-color: var(--ok); } .happened.bad { border-left-color: var(--bad); } .happened.hold { border-left-color: var(--hold); } .happened.unk { border-left-color: var(--unk); } .happened.info { border-left-color: var(--info); }
+.happened-icon { font-size: 20px; line-height: 1.2; width: 26px; text-align: center; }
+.result-head { font-weight: 700; margin-bottom: 2px; }
+.tl-icon { width: 20px; text-align: center; }
+.meter { height: 5px; background: var(--sunk); border-radius: 99px; overflow: hidden; margin-top: 4px; }
+.meter div { height: 100%; background: var(--ok); border-radius: 99px; transition: width .3s; }

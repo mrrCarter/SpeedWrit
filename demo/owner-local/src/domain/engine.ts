@@ -71,6 +71,11 @@ export class Engine {
   readonly ready: Promise<void>;
   latencyMs: number;
 
+  /** Bumped by every reset (fresh, sample, replay): per-run UI state keys on it. */
+  get generation(): number {
+    return this.epoch;
+  }
+
   constructor(options: { latencyMs?: number; signer?: Signer | Promise<Signer>; seed?: "fresh" | "sample" } = {}) {
     this.seed = options.seed ?? "sample";
     this.s = seedState(this.seed);
@@ -513,10 +518,16 @@ export class Engine {
     return { dispatch: await this.reserveSend(job, p, version, "auto") };
   }
 
-  async reviseSend(proposalId: string, change: Pick<SendInput, "fields" | "custom" | "prompt">): Promise<AgentResult> {
+  async reviseSend(proposalId: string, change: Pick<SendInput, "fields" | "custom" | "prompt" | "connectionId">): Promise<AgentResult> {
+    const before = this.s.providerCalls;
     const result = await this.lock(async (): Promise<AgentResult> => {
+      if (!this.connection(change.connectionId)) return this.unauthenticated();
       const p = this.proposal(proposalId);
-      if (!p || p.kind !== "send") return { status: "denied", reasonCode: "proposal_not_found", message: "Not revised. No such proposal." };
+      const bound = p ? this.s.jobs.find((j) => j.id === p.jobId)?.agentConnectionId : undefined;
+      // Only the connection the job is bound to may revise its proposals; anyone else sees nothing.
+      if (!p || p.kind !== "send" || bound !== (change.connectionId ?? PRIMARY_CONNECTION_ID)) {
+        return { status: "denied", reasonCode: "proposal_not_found", message: "Not revised. No such proposal." };
+      }
       if (p.status !== "pending_approval") return { status: "denied", reasonCode: "not_pending", message: "Not revised. That proposal is no longer waiting for approval." };
       const job = this.job(p.jobId, "send") as SendJob;
       const old = p.versions[p.currentVersion - 1] as SendVersion;
@@ -531,7 +542,7 @@ export class Engine {
       this.commit();
       return { status: "pending_approval", message: `Not sent yet. Version ${next.n} is waiting for the owner's approval.`, proposalId: p.id, version: next.n, versionHash: next.hash, reviewReasons: next.reviewReasons, receiptSeq: r.seq };
     });
-    return this.log("revise_proposal", `${proposalId} → ${change.custom ? "custom wording" : "fields"}`, result, { before: this.s.providerCalls, prompt: change.prompt });
+    return this.log("revise_proposal", `${proposalId} → ${change.custom ? "custom wording" : "fields"}`, result, { connectionId: change.connectionId, before, prompt: change.prompt });
   }
 
   private async reserveSend(job: SendJob, p: SendProposal, v: SendVersion, via: "auto" | "owner"): Promise<Dispatch> {

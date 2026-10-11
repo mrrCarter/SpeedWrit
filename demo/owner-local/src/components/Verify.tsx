@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { tamperOneByte, verifyReceipt, type Signer, type Verification } from "../domain/crypto";
 import type { Receipt } from "../domain/types";
 import { useEngine, useEngineState } from "../engineContext";
+import { verifyStore } from "../explain";
 import { Card, Chip, short } from "./ui";
 
 export function Verify() {
@@ -27,7 +28,9 @@ export function Verify() {
 
   const verify = async () => {
     if (!signer || !subject) return;
-    setCheck(await verifyReceipt(subject, signer, list[subject.seq - 2]));
+    const v = await verifyReceipt(subject, signer, list[subject.seq - 2]);
+    setCheck(v);
+    if (!tampered && v.hashOk && v.signatureOk) verifyStore.mark(engine.generation);
   };
   const verifyAll = async () => {
     if (!signer) return;

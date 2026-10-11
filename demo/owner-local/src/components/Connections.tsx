@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useEngine, useEngineState } from "../engineContext";
+import { AlertsCard } from "./AlertsCard";
 import { Card, Chip, fmtTime } from "./ui";
 
 const HOST = "https://speedwrit.local";
@@ -33,6 +34,8 @@ export function Connections() {
           )}
         </div>
       </Card>
+
+      <AlertsCard />
 
       <Card title="Agents">
         {agents.length === 0 && <p className="muted">No agent connected yet.</p>}

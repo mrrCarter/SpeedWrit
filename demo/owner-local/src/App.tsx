@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useEngineState } from "./engineContext";
 import { AgentPanel } from "./components/AgentPanel";
 import { Connections } from "./components/Connections";
+import { DemoGuide, WhatJustHappened } from "./components/Explainers";
 import { Jobs } from "./components/Jobs";
 import { Logo } from "./components/Logo";
 import { NewJob } from "./components/NewJob";
@@ -26,7 +27,9 @@ export function App() {
   const [agentOpen, setAgentOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => history.replaceState(null, "", `#${tab}`), [tab]);
+  useEffect(() => {
+    history.replaceState(null, "", `#${tab}`);
+  }, [tab]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3600);
@@ -59,6 +62,8 @@ export function App() {
       </header>
       <div className={`layout${agentOpen ? " with-agent" : ""}`}>
         <main>
+          {tab !== "lab" && <DemoGuide go={(t) => setTab(t as TabId)} />}
+          <WhatJustHappened />
           {tab === "connections" && <Connections />}
           {tab === "new" && <NewJob done={() => { setTab("jobs"); setToast("Job confirmed. Ask ChatGPT what jobs it can do."); }} />}
           {tab === "waiting" && <Waiting />}
