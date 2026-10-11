@@ -82,6 +82,7 @@ export {
   AUTHORIZATION_CODE_TTL_SECONDS,
   CHATGPT_REDIRECT,
   GROK_REDIRECT,
+  GROK_BOT_REDIRECTS,
   assertOrigin,
   oauthMetadata,
   unauthorizedChallenge,

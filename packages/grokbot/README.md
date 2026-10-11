@@ -8,9 +8,9 @@ Each Grok surface reaches SpeedWrit from xAI's servers, so the host must be publ
 
 | Surface | How it authenticates | What the host needs |
 | --- | --- | --- |
-| **grokbot CLI** (this package, xAI Responses API) | OAuth sign-in as its own client, or the secret path | `REDIRECT_FALLBACKS` includes `http://127.0.0.1:8976/callback` (OAuth), or `SECRET_PATH_FALLBACK=on` |
-| **Grok on grok.com** (custom connector) | OAuth: dynamic registration, PKCE S256 | Grok's callback allowed (see below) |
-| **Grok Bot desktop app** | OAuth, or the secret-path URL with no sign-in | The secret path works today; its OAuth callback is not yet confirmed |
+| **grokbot CLI** (this package, xAI Responses API) | The secret path, or OAuth sign-in as its own client | `SECRET_PATH_FALLBACK=on`, or `REDIRECT_FALLBACKS` includes `http://127.0.0.1:8976/callback` |
+| **Grok on grok.com** (custom connector) | OAuth: dynamic registration, PKCE S256 | Nothing: its callback is built in |
+| **Grok Bot desktop app** | OAuth (observed), or the secret-path URL | Nothing for OAuth: its two callbacks are built in |
 
 Each OAuth consent creates its **own agent connection**, and every job is bound to one. A job confirmed for ChatGPT refuses grokbot with a wrong-client denial before Gmail is touched. To let Grok send, confirm a job for Grok's connection.
 
@@ -42,7 +42,7 @@ node packages/grokbot/dist/cli.js demo --from 2 --to 3 --json
 
 **OAuth mode.** `login` registers grokbot as a public client named "grokbot (xAI Grok)", opens the consent page, and catches the code on `http://127.0.0.1:8976/callback`. It checks `state` and RFC 9207 `iss`. Access tokens last one hour; grokbot refreshes five minutes early and saves the rotated pair before using it, because SpeedWrit revokes the whole grant when a rotated refresh token is shown twice.
 
-**Secret-path mode.** The owner mints `HOST/mcp/c/<secret>` for an existing agent connection with `POST /owner/agent-connections/secret-path` (host needs `SECRET_PATH_FALLBACK=on`). The URL is the credential: grokbot sends no `authorization` and redacts the secret in everything it prints.
+**Secret-path mode.** The owner creates a connection and its URL `HOST/mcp/c/<secret>` in one step: in the owner app, or with `POST /owner/agent-connections/secret-path-new` and `client_label: "grokbot"`. An existing connection gets one with `POST /owner/agent-connections/secret-path`. The host needs `SECRET_PATH_FALLBACK=on`. The URL is the credential: grokbot sends no `authorization` and redacts the secret in everything it prints.
 
 **One attempt per call.** grokbot never retries an xAI call, because a retry could repeat a send request. A failure is reported with its HTTP status, never the key.
 
@@ -52,7 +52,7 @@ node packages/grokbot/dist/cli.js demo --from 2 --to 3 --json
 2. Server URL: `https://HOST/mcp`.
 3. Grok discovers the OAuth metadata, registers itself, and opens SpeedWrit's sign-in and consent. Press **Allow**.
 
-Grok's callback is `https://grok.com/connectors-oauth-exchange-code/` according to public reports (xAI does not document it). Until it is built into SpeedWrit's allow-list, add it to the host's `REDIRECT_FALLBACKS`.
+Grok's callback is `https://grok.com/connectors-oauth-exchange-code/`, built into SpeedWrit's allow-list. xAI does not document it; it comes from MCP server operators' reports and has not been observed here yet.
 
 ## Grok Bot desktop app
 
@@ -62,7 +62,11 @@ In a Grok Bot chat:
 Add a custom MCP server called speedwrit at https://HOST/mcp
 ```
 
-Confirm with **Add it**. If Grok Bot shows an **Authorize** card, sign in and press **Allow**. If its sign-in fails on a redirect it does not list, use the secret path instead, which needs no sign-in:
+Confirm with **Add it**, press **Authorize**, then **Allow** on SpeedWrit's consent page. Or add it under Settings, then Plugins.
+
+What Grok Bot sends, observed on 2026-10-11 against the lab: it signs in as `client_name: "Cursor"` (user agent `Cursor/1.0.0`), registers `https://www.cursor.com/agents/mcp/oauth/callback` and `http://localhost:8787/callback` together, and authorizes with the first and `resource=HOST/mcp`. Both callbacks are built into SpeedWrit's allow-list, because registration needs every listed URI allowed. The consent screen names the client "Cursor".
+
+Without sign-in, give it a secret-path URL instead:
 
 ```text
 Add a custom MCP server called speedwrit at https://HOST/mcp/c/<secret>
@@ -99,7 +103,7 @@ Every agent connection that connects gets the demo's job, "Tuesday recap to Dana
    SPEEDWRIT_MCP_URL=https://<tunnel>/mcp/c/<secret> XAI_API_KEY=... node packages/grokbot/dist/cli.js demo
    ```
 5. **grok.com**: add a custom connector with `https://<tunnel>/mcp`, press Allow, then say the six demo prompts in a Grok chat.
-6. **Grok Bot**: say "Add a custom MCP server called speedwrit at https://<tunnel>/mcp". Watch the lab log for its registration. If sign-in fails, use the secret-path URL instead.
+6. **Grok Bot**: say "Add a custom MCP server called speedwrit at https://<tunnel>/mcp", then Authorize and Allow. Watch the lab log for its registration.
 7. Approve held versions at `http://127.0.0.1:8790/lab`. The outbox and receipts are on the same page.
 
-After the test, the redirect URIs in the log are what goes into the allow-list or `REDIRECT_FALLBACKS` on the real host.
+Any redirect URI the log shows that SpeedWrit does not already allow goes into `REDIRECT_FALLBACKS` on the real host, or into the allow-list by PR.

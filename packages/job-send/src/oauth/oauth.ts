@@ -30,6 +30,16 @@ const CHATGPT_PER_CONNECTION = /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za
  */
 export const GROK_REDIRECT = "https://grok.com/connectors-oauth-exchange-code/";
 
+/**
+ * Grok Bot, xAI's desktop app (it signs in as client_name "Cursor", user agent Cursor/1.0.0), registers
+ * both of these, and registration needs every listed URI allowed. Observed from Grok Bot on 2026-10-11;
+ * it authorizes with the first. The loopback one is a native-app redirect (RFC 8252), safe under PKCE.
+ */
+export const GROK_BOT_REDIRECTS: readonly string[] = Object.freeze([
+  "https://www.cursor.com/agents/mcp/oauth/callback",
+  "http://localhost:8787/callback",
+]);
+
 // ---- Origin and metadata ---------------------------------------------------------------------
 
 /** A public origin: https, a host, no path, query, fragment, credentials or trailing slash. */
@@ -117,10 +127,12 @@ export function verifyPkceS256(verifier: unknown, challenge: unknown): boolean {
 
 // ---- Redirect URIs, registration and the authorization request ------------------------------
 
-/** Whether a redirect URI is ChatGPT's, Grok's or one of the configured fallbacks, by exact string. */
+/** Whether a redirect URI is ChatGPT's, Grok's (grok.com or Grok Bot) or one of the configured fallbacks, by exact string. */
 export function isAllowedRedirectUri(uri: unknown, fallbacks: readonly string[] = []): boolean {
   if (typeof uri !== "string") return false;
-  return uri === CHATGPT_REDIRECT || uri === GROK_REDIRECT || CHATGPT_PER_CONNECTION.test(uri) || fallbacks.includes(uri);
+  return (
+    uri === CHATGPT_REDIRECT || uri === GROK_REDIRECT || GROK_BOT_REDIRECTS.includes(uri) || CHATGPT_PER_CONNECTION.test(uri) || fallbacks.includes(uri)
+  );
 }
 
 export type OAuthError =

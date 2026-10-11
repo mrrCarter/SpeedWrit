@@ -43,7 +43,7 @@ const PORT = Number(process.env.PORT ?? 8790);
 const LOCAL = `http://127.0.0.1:${PORT}`;
 const ACCEPT_ANY = process.env.LAB_ACCEPT_ANY_REDIRECT === "on";
 const LOG_FILE = new URL("./lab-log.jsonl", import.meta.url).pathname;
-const fallbacks = (process.env.REDIRECT_FALLBACKS ?? "http://127.0.0.1:8976/callback,https://grok.com/connectors-oauth-exchange-code/").split(",").map((s) => s.trim()).filter(Boolean);
+const fallbacks = (process.env.REDIRECT_FALLBACKS ?? "http://127.0.0.1:8976/callback").split(",").map((s) => s.trim()).filter(Boolean);
 
 const log = (entry) => {
   const line = JSON.stringify({ at: new Date().toISOString(), ...entry });
@@ -235,7 +235,7 @@ SpeedWrit lab on ${LOCAL}, public as ${HOST}  (stub mail; the owner is always si
   OAuth MCP URL   ${HOST}/mcp            (grok.com connector, Grok Bot OAuth, grokbot login)
   secret path     ${secretUrl}
                   (Grok Bot / grokbot without sign-in; local doctor: ${LOCAL}/mcp/c/${secretUrl.split("/mcp/c/")[1]})
-  redirects ok    ChatGPT${fallbacks.length ? `, ${fallbacks.join(", ")}` : ""}${ACCEPT_ANY ? "  + CAPTURE MODE: any registered redirect" : ""}
+  redirects ok    ChatGPT, grok.com, Grok Bot${fallbacks.length ? `, ${fallbacks.join(", ")}` : ""}${ACCEPT_ANY ? "  + CAPTURE MODE: any registered redirect" : ""}
   log             ${LOG_FILE}
 `);
 });
