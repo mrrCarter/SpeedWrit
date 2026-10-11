@@ -6,6 +6,8 @@ export const SAY = {
   providerAccepted: "Provider accepted",
   witnessed: "Witnessed",
   outcomeUnknown: "Outcome unknown. Do not resend.",
+  /** A request failure is not a recorded provider outcome; inspect receipts before acting again. */
+  requestUnconfirmed: "We could not confirm the request result. Check the job's Flight Recorder before repeating an action.",
   resolveSeen: "I see it",
   resolveNotArrived: "It did not arrive",
   signatureVerified: "Signature verified",
