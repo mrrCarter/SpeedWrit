@@ -12,6 +12,11 @@ param googleClientId string
 param demoRecipients string
 param ownerAppContacts string = '[]'
 param jobPurpose string = 'Send a recap of our call.'
+@allowed(['off', 'on'])
+// This parameter is a noncredential feature flag, not a secret-path URL.
+#disable-next-line secure-secrets-in-params
+param secretPathFallback string = 'off'
+param redirectFallbacks string = ''
 @secure()
 param databaseUrl string
 @secure()
@@ -63,7 +68,8 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
           { name: 'DEMO_RECIPIENTS', value: demoRecipients }
           { name: 'OWNER_APP_CONTACTS', value: ownerAppContacts }
           { name: 'JOB_PURPOSE', value: jobPurpose }
-          { name: 'SECRET_PATH_FALLBACK', value: 'off' }
+          { name: 'SECRET_PATH_FALLBACK', value: secretPathFallback }
+          { name: 'REDIRECT_FALLBACKS', value: redirectFallbacks }
           { name: 'ACCESS_LOG', value: 'on' }
         ]
         probes: [
