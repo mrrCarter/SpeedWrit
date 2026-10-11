@@ -15,7 +15,8 @@ import { Connect } from "../screens/Connect";
 import { AgentConnectionSetup } from "../screens/AgentConnectionSetup";
 import { ExceptionCard, type PendingVersion } from "../screens/ExceptionCard";
 import { FlightRecorder } from "../screens/FlightRecorder";
-import { FrontDoor, type CompleteDraft } from "../screens/FrontDoor";
+import type { CompleteDraft } from "../screens/FrontDoor";
+import { LiveJobForm } from "../screens/LiveJobForm";
 import { pinnedVerifier, VerifyPage, type Pinned } from "../screens/VerifyPage";
 import {
   jobDraftBody,
@@ -149,11 +150,12 @@ function NewJobView(props: Pick<OwnerAppProps, "api" | "jobDefaults" | "contacts
   const [ids, setIds] = useState<ConnectState | null>(null);
   useEffect(() => void call(() => api.connectState()).then((state) => state && setIds(state)), [api, call]);
   if (!created) {
-    if (ids && (!ids.connectionId || !ids.agentConnectionId)) {
+    if (!ids) return <p role="status">Loading connections…</p>;
+    if (!ids.connectionId || !ids.agentConnectionId) {
       return <p>Connect Gmail and an agent first: a job binds to both.</p>;
     }
     return (
-      <FrontDoor
+      <LiveJobForm
         contacts={contacts}
         timeZone={timeZone}
         {...(now ? { now } : {})}
