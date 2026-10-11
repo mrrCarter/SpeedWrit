@@ -1,0 +1,33 @@
+name: ci
+
+# Every PR and every push to main: a clean install, then typecheck and the full test suite of all
+# three packages on Linux. The job-send and job-send-app suites start their own embedded Postgres.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install
+        run: npx -y npm@11.6.1 ci --ignore-scripts --no-audit --no-fund
+      - name: typecheck
+        run: npx -y npm@11.6.1 run typecheck
+      - name: test
+        run: npx -y npm@11.6.1 test
