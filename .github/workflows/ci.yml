@@ -33,3 +33,27 @@ jobs:
         run: npx -y npm@11.6.1 test
       - name: measurement report tests
         run: node --test scripts/measurement-report.test.mjs
+
+  # The repo is public: every commit a PR brings must carry a GitHub noreply address as author and
+  # committer, never a personal email. Only commit ids are printed, never the addresses.
+  commit-identity:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: commits use a noreply email
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bad=$(git log --format='%h %ae %ce' "$BASE..$HEAD" | awk '$2 !~ /@users\.noreply\.github\.com$|^noreply@github\.com$/ || $3 !~ /@users\.noreply\.github\.com$|^noreply@github\.com$/ {print $1}')
+          if [ -n "$bad" ]; then
+            echo "::error::these commits carry a non-noreply author or committer email; re-author them with your GitHub noreply address:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "all commits in $BASE..$HEAD use a noreply email"
