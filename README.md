@@ -50,7 +50,7 @@ ChatGPT / Grok ──propose_send──▶ /mcp ──▶ GATE (code checks, fix
 - **Gate order:** job exists for this connection → rate limit → job active → not expired → dispatch not stopped → exactly one recipient → recipient is the job's → send limit → fields within rules (length, single line, no control chars, no URL) → other-client mention → render → AI review (can only add a hold).
 - **Invariants the code keeps:** a version is immutable after insert; at most one approval and one dispatch per version (unique constraints); `sends_reserved` never exceeds `max_sends` (conditional update under lock); no receipt, no change; dispatch sends the stored MIME bytes, nothing is re-rendered.
 - **STOP** sets `dispatch_enabled = false` first (instant, `STOP_ENGAGED`), then revokes the Google token. It blocks every reservation that starts afterwards; nothing recalls an email already submitted.
-- **UNKNOWN** (timeout, reset, 5xx) keeps the reservation and never resends; the owner resolves it ("I see it" / "It did not arrive"), with a receipt naming the owner as the source.
+- **UNKNOWN** (timeout, reset, 5xx) keeps the reservation and does not automatically resend; the owner resolves it ("I see it" / "It did not arrive"), with a receipt naming the owner as the source.
 - **AI review** reads only agent-written free text, runs after every code check passed and before any transaction opens, one attempt within a budget. `hold` and `unavailable` both add a review reason; `clear` changes nothing. It can never override a code denial or waive an approval.
 
 ## Agent connection
@@ -106,7 +106,7 @@ CI on every PR: clean install, typecheck, the full suite with an embedded Postgr
 | Google refresh token | our database, AES-256-GCM | Google; decrypted only inside the executor |
 | Receipt signing key | deploy secret | nowhere external; the public key is pinned in the owner app |
 
-The server does not serialize secrets to MCP output, the UI, receipts, its own logs or AI-review requests, and its access logs redact secret paths. The grokbot terminal client's output redaction is an open review follow-up, so its raw output is not a reviewed boundary.
+Gmail credentials and the signing key remain server-side. Connection setup intentionally supplies an agent credential to its owner or authorized client; treat it as private. Receipts and AI-review content omit credentials. Access logs redact private connection paths. Grokbot raw-output redaction remains an open follow-up.
 
 ## What we say and never say
 
