@@ -20,7 +20,10 @@ export function AgentPanel({ close }: { close: () => void }) {
   const pending = s.proposals.find((p) => p.kind === "send" && p.jobId === job?.id && p.status === "pending_approval");
   const log = s.agentLog.filter((e) => e.connectionId === agent?.id).slice(0, 30).reverse();
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [log.length]);
+  useEffect(() => {
+    // Braces matter: current Chrome returns a Promise from scrollIntoView, and React treats a returned value as cleanup.
+    end.current?.scrollIntoView({ block: "end" });
+  }, [log.length]);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);

@@ -30,7 +30,7 @@ export function Verify() {
     if (!signer || !subject) return;
     const v = await verifyReceipt(subject, signer, list[subject.seq - 2]);
     setCheck(v);
-    if (!tampered && v.hashOk && v.signatureOk) verifyStore.mark();
+    if (!tampered && v.hashOk && v.signatureOk) verifyStore.mark(engine.generation);
   };
   const verifyAll = async () => {
     if (!signer) return;

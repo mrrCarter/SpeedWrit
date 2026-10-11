@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { alertsEnabled, setAlertsEnabled } from "../alertSwitch";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { alertsEnabled, setAlertsEnabled, subscribeAlerts } from "../alertSwitch";
 import { Card, Chip } from "./ui";
 
 interface RelayStatus {
   mode: "live" | "dry_run";
+  paused?: boolean;
   problems: string[];
   to: string;
   windowSeconds: number;
@@ -15,7 +16,7 @@ interface RelayStatus {
 export function AlertsCard() {
   const [status, setStatus] = useState<RelayStatus | null>(null);
   const [down, setDown] = useState(false);
-  const [on, setOn] = useState(alertsEnabled());
+  const on = useSyncExternalStore(subscribeAlerts, alertsEnabled);
 
   useEffect(() => {
     let alive = true;
@@ -50,7 +51,8 @@ export function AlertsCard() {
         partial or failed provider result, a revoked agent). At most one call per {status?.windowSeconds ?? 60} s, with a summary. The call can't approve anything.
       </p>
       {down && <p className="fail">Start it with <code>npm run dial</code> in speedwrit-local.</p>}
-      {status?.mode === "dry_run" && <p className="muted">Dry run: {status.problems.join(", ")}. Add them to <code>.env.local</code> and restart the relay.</p>}
+      {status?.mode === "dry_run" && <p className="muted">Dry run: {status.problems.join(", ")}. Live calls need the Dial key and number plus an explicit <code>DIAL_LIVE=1</code> in <code>.env.local</code>, then a relay restart.</p>}
+      {status?.paused && <p className="muted">Paused: alerts are off, and nothing queued will be called.</p>}
       {status?.lastCall && (
         <div className={`result ${status.lastCall.ok ? "ok" : "bad"}`}>
           <div className="row">
@@ -62,7 +64,7 @@ export function AlertsCard() {
       )}
       <hr />
       <div className="row">
-        <label className="row"><input type="checkbox" checked={on} onChange={(e) => { setAlertsEnabled(e.target.checked); setOn(e.target.checked); }} /> alerts on</label>
+        <label className="row"><input type="checkbox" checked={on} onChange={(e) => setAlertsEnabled(e.target.checked)} /> alerts on</label>
         <span className="muted">{status?.pending ? `${status.pending} event(s) waiting for the next call` : ""}</span>
         <span className="spacer" />
         <button className="btn" disabled={down} onClick={() => void fetch("/dial/test", { method: "POST" })}>Send test call</button>

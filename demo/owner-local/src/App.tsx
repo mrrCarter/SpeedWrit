@@ -27,7 +27,9 @@ export function App() {
   const [agentOpen, setAgentOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => history.replaceState(null, "", `#${tab}`), [tab]);
+  useEffect(() => {
+    history.replaceState(null, "", `#${tab}`);
+  }, [tab]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3600);

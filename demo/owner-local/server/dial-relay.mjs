@@ -6,7 +6,9 @@
 // refusals rings once with a summary instead of once per event.
 //
 // Config comes from .env.local (gitignored): DIAL_API_KEY, DIAL_NUMBER (your Dial number or its id),
-// ALERT_PHONE (E.164, e.g. +14155550123). Missing key or number, or DIAL_DRY_RUN=1: dry run, which logs the call.
+// ALERT_PHONE (E.164, e.g. +14155550123), and DIAL_LIVE=1. Live calls need ALL of them: credentials alone never
+// dial anyone. Anything missing, or DIAL_DRY_RUN=1, means a dry run that only logs what it would say.
+// POST /pause drops queued, unplaced calls and refuses new ones until POST /resume (the owner's alerts-off switch).
 
 import http from "node:http";
 import { DialClient } from "@getdial/sdk";
@@ -19,7 +21,13 @@ const FROM = process.env.DIAL_NUMBER?.trim() ?? "";
 const TO = process.env.ALERT_PHONE?.trim() ?? "";
 const E164 = /^\+[1-9]\d{7,14}$/;
 
-const problems = [!KEY && "DIAL_API_KEY missing", !FROM && "DIAL_NUMBER missing", !E164.test(TO) && "ALERT_PHONE missing or not E.164", process.env.DIAL_DRY_RUN === "1" && "DIAL_DRY_RUN=1"].filter(Boolean);
+const problems = [
+  !KEY && "DIAL_API_KEY missing",
+  !FROM && "DIAL_NUMBER missing",
+  !E164.test(TO) && "ALERT_PHONE missing or not E.164",
+  process.env.DIAL_LIVE !== "1" && "DIAL_LIVE=1 not set (dry run by default)",
+  process.env.DIAL_DRY_RUN === "1" && "DIAL_DRY_RUN=1",
+].filter(Boolean);
 const live = problems.length === 0;
 const dial = live ? new DialClient({ apiKey: KEY }) : null;
 const mask = (n) => (n.length > 4 ? `•••${n.slice(-4)}` : n ? "•••" : "");
@@ -35,6 +43,7 @@ let pending = [];
 let timer = null;
 let lastCallAt = 0;
 let lastCall = null;
+let paused = false;
 
 // Only our own short labels reach the voice prompt: letters, digits and simple punctuation, bounded.
 const clean = (s) => String(s ?? "").replace(/[^A-Za-z0-9 _.,:'-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
@@ -62,6 +71,10 @@ function instruction(text) {
 
 async function flush() {
   timer = null;
+  if (paused) {
+    pending = [];
+    return;
+  }
   if (pending.length === 0) return;
   const wait = lastCallAt + WINDOW_MS - Date.now();
   if (wait > 0) {
@@ -89,8 +102,20 @@ async function flush() {
 }
 
 function queue(items) {
+  if (paused) return 0;
   pending.push(...items);
   if (!timer) timer = setTimeout(flush, DEBOUNCE_MS);
+  return items.length;
+}
+
+function pause() {
+  paused = true;
+  const dropped = pending.length;
+  pending = [];
+  if (timer) clearTimeout(timer);
+  timer = null;
+  if (dropped) console.log(`[dial] paused: dropped ${dropped} queued event(s), no call placed`);
+  return dropped;
 }
 
 function readJson(req) {
@@ -124,7 +149,12 @@ http
     const path = (req.url ?? "").replace(/^\/dial/, "") || "/";
     try {
       if (req.method === "GET" && path === "/status") {
-        return send(res, 200, { mode: live ? "live" : "dry_run", problems, to: mask(TO), from: mask(FROM), windowSeconds: WINDOW_MS / 1000, pending: pending.length, lastCall });
+        return send(res, 200, { mode: live ? "live" : "dry_run", paused, problems, to: mask(TO), from: mask(FROM), windowSeconds: WINDOW_MS / 1000, pending: pending.length, lastCall });
+      }
+      if (req.method === "POST" && path === "/pause") return send(res, 200, { paused: true, dropped: pause() });
+      if (req.method === "POST" && path === "/resume") {
+        paused = false;
+        return send(res, 200, { paused: false });
       }
       if (req.method === "POST" && (path === "/alert" || path === "/test")) {
         const body = path === "/test" ? { items: [{ category: "test", label: "SpeedWrit alerts are connected" }] } : await readJson(req);
@@ -133,8 +163,8 @@ http
           .slice(0, 50)
           .map((it) => ({ category: it.category, label: clean(it.label) || "event" }));
         if (items.length === 0) return send(res, 400, { error: "no_items" });
-        queue(items);
-        return send(res, 202, { queued: items.length, mode: live ? "live" : "dry_run" });
+        if (paused) return send(res, 409, { error: "paused", queued: 0 });
+        return send(res, 202, { queued: queue(items), mode: live ? "live" : "dry_run" });
       }
       return send(res, 404, { error: "not_found" });
     } catch (err) {

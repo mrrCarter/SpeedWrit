@@ -91,7 +91,7 @@ export function explain(r: Receipt, s: State): Explained {
     case "NOT_DONE":
       return { icon: "✕", tone: "bad", title: isSend ? "Not sent" : "Not done", detail: `${reason.charAt(0).toUpperCase()}${reason.slice(1)}.${r.detail.released ? " The send slot was given back." : ""}` };
     case "OUTCOME_UNKNOWN":
-      return { icon: "?", tone: "unk", title: "Gmail didn't confirm", detail: "SpeedWrit can't tell if it went out, so it won't retry. The slot stays used until you check." };
+      return { icon: "?", tone: "unk", title: "Gmail didn't confirm", detail: "SpeedWrit can't tell if it went out, so it won't retry. The send slot stays used, even if you later say it didn't arrive." };
     case "OUTCOME_RESOLVED":
       return { icon: "✓", tone: "unk", title: `You answered: ${r.detail.observation === "arrived" ? "it arrived" : "it did not arrive"}`, detail: r.detail.slotKept ? "Recorded. The slot stays used, and nothing resends." : "Recorded." };
     case "STOP_ENGAGED":
@@ -113,15 +113,18 @@ export interface Step {
   done: boolean;
 }
 
-let verifiedOnce = false;
+// The run in which a receipt was verified. Start fresh, Load sample and Replay start a new engine generation,
+// so an earlier run's check never carries into a fresh one.
+let verifiedGeneration: number | null = null;
 const listeners = new Set<() => void>();
 export const verifyStore = {
-  mark(): void {
-    if (verifiedOnce) return;
-    verifiedOnce = true;
+  mark(generation: number): void {
+    if (verifiedGeneration === generation) return;
+    verifiedGeneration = generation;
     for (const l of listeners) l();
   },
-  get: (): boolean => verifiedOnce,
+  get: (): number | null => verifiedGeneration,
+  doneFor: (generation: number): boolean => verifiedGeneration === generation,
   subscribe: (fn: () => void): (() => void) => {
     listeners.add(fn);
     return () => listeners.delete(fn);

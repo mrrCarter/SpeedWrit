@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { alertsEnabled } from "./alertSwitch";
+import { alertsEnabled, syncRelay } from "./alertSwitch";
 import { startAlerts } from "./alerts";
 import { Engine } from "./domain/engine";
 import { EngineContext } from "./engineContext";
@@ -11,7 +11,7 @@ import "./styles.css";
 // no jobs. The provider takes ~0.6 s so in-flight states are visible.
 const engine = new Engine({ latencyMs: 650, seed: "fresh" });
 // Phone alerts through the local Dial relay (npm run dial); off-switch in Connections.
-startAlerts(engine, alertsEnabled);
+startAlerts(engine, alertsEnabled, syncRelay);
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>

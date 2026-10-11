@@ -71,6 +71,11 @@ export class Engine {
   readonly ready: Promise<void>;
   latencyMs: number;
 
+  /** Bumped by every reset (fresh, sample, replay): per-run UI state keys on it. */
+  get generation(): number {
+    return this.epoch;
+  }
+
   constructor(options: { latencyMs?: number; signer?: Signer | Promise<Signer>; seed?: "fresh" | "sample" } = {}) {
     this.seed = options.seed ?? "sample";
     this.s = seedState(this.seed);

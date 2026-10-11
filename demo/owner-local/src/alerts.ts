@@ -36,7 +36,8 @@ export function classify(r: Receipt): AlertItem | null {
 }
 
 /** Watches the live engine and posts each batch of new alertable receipts to the relay. */
-export function startAlerts(engine: Engine, enabled: () => boolean): void {
+export function startAlerts(engine: Engine, enabled: () => boolean, sync?: (on: boolean) => void): void {
+  sync?.(enabled());
   let seen = engine.getState().receipts.length;
   engine.subscribe(() => {
     const list = engine.getState().receipts;

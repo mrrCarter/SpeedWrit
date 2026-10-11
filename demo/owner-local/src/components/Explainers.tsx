@@ -1,12 +1,14 @@
 import { useState, useSyncExternalStore } from "react";
 import { demoSteps, explain, verifyStore } from "../explain";
-import { useEngineState } from "../engineContext";
+import { useEngine, useEngineState } from "../engineContext";
 import { fmtTime } from "./ui";
 
 /** The MVP story as a row of steps that tick off from what actually happened, with the next one highlighted. */
 export function DemoGuide({ go }: { go: (tab: string) => void }) {
   const s = useEngineState();
-  const verified = useSyncExternalStore(verifyStore.subscribe, verifyStore.get);
+  const engine = useEngine();
+  useSyncExternalStore(verifyStore.subscribe, verifyStore.get);
+  const verified = verifyStore.doneFor(engine.generation);
   const [hidden, setHidden] = useState(false);
   const steps = demoSteps(s, verified);
   const next = steps.find((x) => !x.done);
