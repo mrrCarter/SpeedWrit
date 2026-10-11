@@ -24,6 +24,7 @@ beforeAll(async () => {
   mkdirSync(DIR, { recursive: true });
   writeFileSync(resolve(DIR, "index.html"), "<!doctype html><title>SpeedWrit</title>");
   writeFileSync(resolve(DIR, "app.js"), "export const app = 1;");
+  writeFileSync(resolve(DIR, "app.css"), "body { color: white; }");
   writeFileSync(resolve(DIR, RECEIPT_KEY_FILE), JSON.stringify({ key_id: KEY_ID, public_key_b64url: "x" }));
   const handle = serveOwnerApp({ dir: DIR, config: CONFIG, receiptKeyId: KEY_ID });
   server = createServer((req, res) => {
@@ -120,8 +121,21 @@ describe("serveOwnerApp", () => {
     expect(JSON.parse(config.body)).toEqual(CONFIG);
   });
 
-  it("the CSP lets the app load only its own script and call only its own API", () => {
-    expect(OWNER_APP_CSP).toBe("default-src 'none'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  it("serves the fixed bundled stylesheet with a same-origin style policy", async () => {
+    const css = await call("GET", "/owner-app/app.css");
+    expect(css.status).toBe(200);
+    expect(css.headers["content-type"]).toBe("text/css; charset=utf-8");
+    expect(css.headers["content-security-policy"]).toBe(OWNER_APP_CSP);
+    expect(css.body).toBe("body { color: white; }");
+    const head = await call("HEAD", "/owner-app/app.css");
+    expect(head.status).toBe(200);
+    expect(head.body).toBe("");
+    expect(head.headers["content-length"]).toBe(String(Buffer.byteLength(css.body)));
+    expect((await call("GET", "/owner-app/app.css.map")).status).toBe(404);
+  });
+
+  it("the CSP permits same-origin scripts/styles/API without inline or remote sources", () => {
+    expect(OWNER_APP_CSP).toBe("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   });
 
   it("serves only those names: anything else under /owner-app is 404, and no path reaches the disk", async () => {

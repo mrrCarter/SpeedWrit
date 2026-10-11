@@ -10,7 +10,7 @@ import type { OwnerAppConfig } from "../app/config";
 export type { OwnerAppConfig };
 
 /** The owner app's page policy: its own script and API, nothing else, never framed. */
-export const OWNER_APP_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+export const OWNER_APP_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 export const OWNER_APP_PATH = "/owner-app/";
 /** Written by build:app beside app.js: the receipt key compiled into the app. Read at start, never served. */
 export const RECEIPT_KEY_FILE = "receipt-key.json";
@@ -61,6 +61,9 @@ export function checkOwnerAppReceiptKey(dir: string, receiptKeyId: string): void
 export function serveOwnerApp(options: { dir: string; config: OwnerAppConfig; receiptKeyId?: string }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   checkOwnerAppConfig(options.config);
   if (options.receiptKeyId !== undefined) checkOwnerAppReceiptKey(options.dir, options.receiptKeyId);
+  let css: Buffer | undefined;
+  try { css = readFileSync(join(options.dir, "app.css")); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const files = {
     html: readFileSync(join(options.dir, "index.html")),
     js: readFileSync(join(options.dir, "app.js")),
@@ -89,6 +92,8 @@ export function serveOwnerApp(options: { dir: string; config: OwnerAppConfig; re
       send(req, res, 200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, files.html);
     } else if (path === `${OWNER_APP_PATH}app.js`) {
       send(req, res, 200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" }, files.js);
+    } else if (path === `${OWNER_APP_PATH}app.css` && css) {
+      send(req, res, 200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-cache" }, css);
     } else if (path === `${OWNER_APP_PATH}config.json`) {
       send(req, res, 200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }, files.config);
     } else {
