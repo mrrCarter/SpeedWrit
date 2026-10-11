@@ -95,6 +95,7 @@ test("registration: the declared client_name holds no invisible character, and i
   assert.equal(register(`Caf${String.fromCodePoint(0xe9)} ${String.fromCodePoint(0x6771, 0x4eac)}`).ok, true, "accented and CJK letters pass");
   assert.equal(register("   ").client_name, "unnamed client");
   assert.equal(register(undefined).client_name, "unnamed client");
+  assert.equal(register(`${" ".repeat(100)}ChatGPT`).client_name, "unnamed client", "blank after the cut is blank");
   const emoji = String.fromCodePoint(0x1f600);
   const cut = register(`${"a".repeat(99)}${emoji}tail`).client_name;
   assert.equal(cut, `${"a".repeat(99)}${emoji}`, "100 code points, the pair kept whole");
