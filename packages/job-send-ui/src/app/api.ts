@@ -23,6 +23,9 @@ export type ConnectState = {
 /** POST /owner/jobs (machine's createJobDraft): the job as the spec's JSON, which sha256(JCS(job)) covers, and that hash. */
 export type CreatedJob = { job: Job; authoritySha256: string };
 
+/** The new secret URL is returned once; callers keep it only in component memory. */
+export type CreatedAgentConnection = { url: string; agent_connection_id: string; receipt_id: string };
+
 /** POST /owner/jobs body (OWNER_BODY_SCHEMAS["/owner/jobs"]): flat snake_case, unknown keys refused. */
 export type JobDraftBody = {
   connection_id: string;
@@ -198,11 +201,44 @@ export class OwnerApi {
   me() {
     return this.call<{ owner: Owner }>("GET", "/owner/me");
   }
-  connectState() {
-    return this.call<ConnectState>("GET", "/owner/connect");
+  async connectState(): Promise<ConnectState> {
+    const answer = await this.call<ConnectState>("GET", "/owner/connect");
+    const gmail = answer?.gmail;
+    const agent = answer?.agentConnection;
+    const text = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+    // Missing status is not evidence that a connection is absent. Keep the last confirmed view.
+    if (!answer || typeof answer !== "object" || Array.isArray(answer) || typeof answer.stopped !== "boolean" ||
+        !(answer.connectionId === null || text(answer.connectionId)) ||
+        !(answer.agentConnectionId === null || text(answer.agentConnectionId)) ||
+        !(gmail === null || (gmail && text(gmail.address) && Array.isArray(gmail.grantedScopes) &&
+          gmail.grantedScopes.every(scope => typeof scope === "string") &&
+          (gmail.status === undefined || ["active", "stopped", "needs_reconnect"].includes(gmail.status)))) ||
+        !(agent === null || (agent && text(agent.mcpUrl) && typeof agent.label === "string" &&
+          (agent.lastUsedAt === null || text(agent.lastUsedAt)))) ||
+        (gmail === null) !== (answer.connectionId === null) ||
+        (agent === null) !== (answer.agentConnectionId === null)) {
+      throw new OwnerApiError(200, "unconfirmed_response");
+    }
+    return answer;
   }
   stop(connectionId: string) {
     return this.call<{ stopped: true; receipt_ids: string[] }>("POST", "/owner/stop", { connection_id: connectionId });
+  }
+  async createAgentConnection(clientLabel: string): Promise<CreatedAgentConnection> {
+    const answer = await this.call<CreatedAgentConnection>("POST", "/owner/agent-connections/secret-path-new", { client_label: clientLabel });
+    if (!answer || typeof answer.url !== "string" || !answer.url.trim() ||
+        typeof answer.agent_connection_id !== "string" || !answer.agent_connection_id.trim() ||
+        typeof answer.receipt_id !== "string" || !answer.receipt_id.trim()) {
+      throw new OwnerApiError(200, "unconfirmed_response");
+    }
+    return answer;
+  }
+  async revokeAgentConnection(agentConnectionId: string): Promise<{ revoked: true; receipt_id: string }> {
+    const answer = await this.call<{ revoked: true; receipt_id: string }>("POST", "/owner/agent-connections/revoke", { agent_connection_id: agentConnectionId });
+    if (!answer || answer.revoked !== true || typeof answer.receipt_id !== "string" || !answer.receipt_id.trim()) {
+      throw new OwnerApiError(200, "unconfirmed_response");
+    }
+    return answer;
   }
   createJob(body: JobDraftBody) {
     return this.call<CreatedJob>("POST", "/owner/jobs", body);

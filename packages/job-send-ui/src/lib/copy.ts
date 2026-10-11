@@ -8,6 +8,13 @@ export const SAY = {
   outcomeUnknown: "Outcome unknown. Do not resend.",
   /** A request failure is not a recorded provider outcome; inspect receipts before acting again. */
   requestUnconfirmed: "We could not confirm the request result. Check the job's Flight Recorder before repeating an action.",
+  agentConnectionCreated: "Agent connection created. Sending still requires a job you approve.",
+  agentConnectionRevoked: "Agent connection revoked.",
+  agentConnectionUnavailable: "Secret URL setup is unavailable on this server. Connect the agent using OAuth instead.",
+  agentConnectionUnconfirmed: "We could not confirm the connection request result. Refresh Connections to inspect its current status before repeating an action.",
+  agentConnectionRevocationUnconfirmed: "Revocation is unconfirmed. Refresh Connections to inspect this connection's status before repeating an action.",
+  agentConnectionNoneActive: "No active agent connection was found. The connection URL is no longer shown.",
+  agentConnectionStillActive: "This agent connection is still active. Revocation has not been confirmed.",
   resolveSeen: "I see it",
   resolveNotArrived: "It did not arrive",
   signatureVerified: "Signature verified",

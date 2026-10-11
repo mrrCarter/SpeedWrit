@@ -33,7 +33,7 @@ export function Connect({ gmail, agentConnection, stopped, onStop }: ConnectProp
       {agentConnection ? (
         <p>
           {/* The label is declared by the client: <bdi> keeps a direction override inside it from reordering the line. */}
-          <bdi>{agentConnection.label}</bdi> (declared) · <code>{agentConnection.mcpUrl}</code> · last used{" "}
+          <bdi style={{ overflowWrap: "anywhere" }}>{agentConnection.label}</bdi> (declared) · <code>{agentConnection.mcpUrl}</code> · last used{" "}
           {agentConnection.lastUsedAt ? <time dateTime={agentConnection.lastUsedAt}>{agentConnection.lastUsedAt}</time> : "never"}
         </p>
       ) : (
