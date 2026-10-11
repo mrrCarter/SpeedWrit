@@ -46,6 +46,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: commits use a noreply email
+        # shell: bash adds -o pipefail, so a failing git log fails the job instead of yielding an empty, passing list.
+        shell: bash
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
