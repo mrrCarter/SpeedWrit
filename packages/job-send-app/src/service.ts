@@ -17,7 +17,6 @@ import {
   ensureSharedTemplate,
   exportRawPublicKey,
   migrate,
-  newId,
   parseDemoRecipients,
   receiptKeyId,
 } from "@writ/job-send";
@@ -125,19 +124,10 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
       authorize: {
         owners: ownerAuth,
         renderConsent: renderConsentHtml,
-        // One agent connection per grant (spec), with AGENT_CONNECTED in the same transaction.
-        createAgentConnection: (ownerId, clientId, clientLabel) =>
-          executor.withTx(ownerId, async (tx) => {
-            const id = newId("ac");
-            await tx.client.query("INSERT INTO agent_connections (id, owner_id, client_id, client_label) VALUES ($1, $2, $3, $4)", [
-              id,
-              ownerId,
-              clientId,
-              clientLabel,
-            ]);
-            await executor.writeReceipt(tx, "AGENT_CONNECTED", { agent_connection: id, client_label: clientLabel, detail: { client_id: clientId } });
-            return id;
-          }),
+        // One agent connection per grant (spec), with AGENT_CONNECTED in the same transaction: the
+        // core's one way to make a connection, which the secret-path fallback also uses.
+        createAgentConnection: async (ownerId, clientId, clientLabel) =>
+          (await core.createAgentConnection(ownerId, clientId, clientLabel)).agent_connection_id,
       },
     });
 

@@ -5,6 +5,12 @@
 
 import { assertOrigin, generateOpaqueToken, hashToken } from "../oauth/oauth.js";
 
+/**
+ * The client_id of an agent connection made for a secret path, without OAuth. A registered client's
+ * id is a random UUID, so it can never be this.
+ */
+export const SECRET_PATH_CLIENT_ID = "secret-path";
+
 /** /mcp/c/ and exactly 43 base64url characters (32 random bytes). */
 export const SECRET_PATH = /^\/mcp\/c\/([A-Za-z0-9_-]{43})$/;
 

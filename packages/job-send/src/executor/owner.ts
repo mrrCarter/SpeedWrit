@@ -69,6 +69,8 @@ export class OwnerRefusal extends OwnerError {
 export const MAX_SENDS_LIMIT = 50;
 export const MAX_JOB_DAYS = 31;
 const PURPOSE_MAX = 500;
+/** An agent connection's label, as the OAuth registration cuts a client's name. */
+const CLIENT_LABEL_MAX = 100;
 const FIELD_MAX_LIMIT = 5000;
 const RULE_KEYS = new Set(["max", "single_line", "required", "free_text"]);
 
@@ -372,8 +374,45 @@ export function createOwnerCore(options: OwnerCoreOptions) {
     });
   }
 
+  /**
+   * The one way an agent connection is made, with AGENT_CONNECTED in the same transaction: by the
+   * OAuth consent (its registered client), or by the owner for the secret-path fallback. With
+   * `secretHash`, the path is stored in that transaction too, so a path never names a connection
+   * that doesn't exist. The label is shown on the Connect screen and in receipts: it may not be
+   * blank, longer than 100 characters, or hold control, format or unassigned characters.
+   */
+  async function createAgentConnection(
+    owner: string,
+    clientId: string,
+    clientLabel: string,
+    options: { secretHash?: string } = {},
+  ): Promise<{ agent_connection_id: string; receipt_id: string }> {
+    if (clientLabel.trim() === "" || [...clientLabel].length > CLIENT_LABEL_MAX || FORBIDDEN_CHARACTERS.test(clientLabel)) {
+      throw new OwnerError("invalid_client_label");
+    }
+    return withTx(pool, owner, async (tx) => {
+      const id = newId("ac");
+      await tx.client.query("INSERT INTO agent_connections (id, owner_id, client_id, client_label) VALUES ($1, $2, $3, $4)", [
+        id,
+        owner,
+        clientId,
+        clientLabel,
+      ]);
+      if (options.secretHash !== undefined) {
+        await tx.client.query("INSERT INTO oauth_secret_paths (secret_hash, agent_connection_id) VALUES ($1, $2)", [options.secretHash, id]);
+      }
+      const receipt_id = await executor.writeReceipt(tx, "AGENT_CONNECTED", {
+        agent_connection: id,
+        client_label: clientLabel,
+        detail: { client_id: clientId },
+      });
+      return { agent_connection_id: id, receipt_id };
+    });
+  }
+
   const core = {
     connectState,
+    createAgentConnection,
     async engageStop(connectionId: string, owner: string) {
       const stopped = await scoped(() => executor.engageStop(connectionId, owner));
       const receipt_ids = [stopped.stopReceipt, stopped.requestReceipt, stopped.resultReceipt].filter((id): id is string => typeof id === "string");

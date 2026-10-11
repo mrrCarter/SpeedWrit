@@ -12,7 +12,7 @@ export {
   type SendOutcome,
 } from "./http.js";
 export { createApp, createAppServer, redactPath, type AppHandler, type AppOptions } from "./app.js";
-export { createSecretPath, InMemorySecretPaths, SECRET_PATH } from "./secret-path.js";
+export { SECRET_PATH_CLIENT_ID, createSecretPath, InMemorySecretPaths, SECRET_PATH } from "./secret-path.js";
 export {
   approvalAnswer,
   createOwnerApi,

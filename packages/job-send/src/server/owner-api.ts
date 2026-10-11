@@ -16,7 +16,7 @@ import type { DispatchOutcome } from "../contract/types.js";
 import { argumentProblem } from "../mcp/arguments.js";
 import { assertOrigin } from "../oauth/oauth.js";
 import type { OwnerSessions } from "./http.js";
-import { createSecretPath } from "./secret-path.js";
+import { SECRET_PATH_CLIENT_ID, createSecretPath } from "./secret-path.js";
 import type { OAuthStore } from "./store.js";
 
 /** The refusals the core may throw as OwnerError. Anything else it throws is a server error. */
@@ -33,6 +33,7 @@ export const OWNER_ERRORS = Object.freeze([
   "job_expired",
   "agent_connection_revoked",
   "not_unknown",
+  "invalid_client_label",
 ] as const);
 export type OwnerErrorCode = (typeof OWNER_ERRORS)[number];
 
@@ -86,6 +87,17 @@ export interface OwnerCore {
   revokeAgentConnection(agentConnectionId: string, ownerId: string): Promise<{ receipt_id: string }>;
   /** Resolves when the agent connection is this owner's and not revoked; otherwise throws OwnerError("not_found"). */
   assertAgentConnection(agentConnectionId: string, ownerId: string): Promise<void>;
+  /**
+   * Creates an agent connection with AGENT_CONNECTED in one transaction; with `secretHash`, its secret
+   * path too, in that same transaction. A blank label, or one with control, format or unassigned
+   * characters, is OwnerError("invalid_client_label").
+   */
+  createAgentConnection(
+    ownerId: string,
+    clientId: string,
+    clientLabel: string,
+    options?: { secretHash?: string },
+  ): Promise<{ agent_connection_id: string; receipt_id: string }>;
   /** Writes a draft job; `job` is the contract's Job, the object the authority hash covers. */
   createJobDraft(ownerId: string, draft: JobDraftInput): Promise<{ job: unknown; authoritySha256: string }>;
   /** Rebuilds the Job under its lock; throws OwnerError("authority_changed") on a mismatch, ("not_draft") if not a draft. */
@@ -129,6 +141,7 @@ export const OWNER_BODY_SCHEMAS = Object.freeze({
   "/owner/stop": body({ connection_id: id }),
   "/owner/agent-connections/revoke": body({ agent_connection_id: id }),
   "/owner/agent-connections/secret-path": body({ agent_connection_id: id }),
+  "/owner/agent-connections/secret-path-new": body({ client_label: text(100) }),
   "/owner/jobs": body({
     connection_id: id,
     agent_connection_id: id,
@@ -230,6 +243,15 @@ export function createOwnerApi(options: OwnerApiOptions): (req: IncomingMessage,
       const { url, secretHash } = createSecretPath(host);
       await options.secretPaths.add(secretHash, agentConnectionId);
       return { url };
+    },
+    // The fallback when the agent can't finish OAuth: a new agent connection and its path, made in one
+    // transaction, so no OAuth consent is needed first. The URL is shown once. secretPaths is the switch
+    // (SECRET_PATH_FALLBACK); the core stores the path with the connection.
+    "/owner/agent-connections/secret-path-new": async (ownerId, input) => {
+      if (!options.secretPaths) throw new OwnerError("not_found");
+      const { url, secretHash } = createSecretPath(host);
+      const created = await core.createAgentConnection(ownerId, SECRET_PATH_CLIENT_ID, input.client_label as string, { secretHash });
+      return { url, ...created };
     },
     "/owner/jobs": async (ownerId, input) =>
       core.createJobDraft(ownerId, {
