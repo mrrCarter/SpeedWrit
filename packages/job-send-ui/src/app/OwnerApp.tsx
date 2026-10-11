@@ -8,6 +8,7 @@
 // A 401 sends the browser to sign-in and back. Every outcome is said in the Say / Never-say table's words.
 import { useCallback, useEffect, useState } from "react";
 import { SAY } from "../lib/copy";
+import { OwnerShell } from "./OwnerShell";
 import type { Contact } from "../lib/frontDoor";
 import { ConfirmJob } from "../screens/ConfirmJob";
 import { Connect } from "../screens/Connect";
@@ -275,17 +276,13 @@ export function OwnerApp(props: OwnerAppProps) {
   else if (path === "/verify") view = <VerifyPage keyFingerprint={props.pinned.keyId} verify={pinnedVerifier(props.pinned)} initialReceipt={lastReceipts.length === 1 ? lastReceipts[0]?.text : ""} />;
   else view = <p>Not found.</p>;
   return (
-    <div>
-      <nav aria-label="Owner">
-        <a href="#/connect">Connections</a> · <a href="#/new">New job</a> · <a href="#/exceptions">Waiting for you</a> · <a href="#/jobs">Jobs</a> ·{" "}
-        <a href="#/verify">Verify</a>
-      </nav>
+    <OwnerShell path={path}>
       {problem ? (
         <p role="alert">
           {SAY.requestUnconfirmed} ({problem}) <a href="#/jobs">Open Jobs</a>.
         </p>
       ) : null}
-      <main>{view}</main>
-    </div>
+      {view}
+    </OwnerShell>
   );
 }

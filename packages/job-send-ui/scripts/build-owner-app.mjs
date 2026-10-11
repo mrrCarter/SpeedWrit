@@ -1,7 +1,7 @@
-// Builds the owner app into dist/owner-app/: app.js (one ES module, minified) and index.html. The receipt key is
+// Builds the owner app into dist/owner-app/: app.js, app.css and index.html. The receipt key is
 // compiled in from RECEIPT_KEY_ID (16 lowercase hex) and RECEIPT_PUBLIC_KEY_B64URL (the raw 32-byte Ed25519 public
-// key, base64url). Serve both files under /owner-app/, plus /owner-app/config.json, with
-//   Content-Security-Policy: default-src 'none'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+// key, base64url). Serve these files under /owner-app/, plus /owner-app/config.json, with
+//   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
 // (the app posts no forms; sign-out is the one, and it stays on this site).
 // It also writes receipt-key.json (never served): the key compiled in, so serveOwnerApp can refuse to start
 // beside a service that signs with another key.
@@ -51,10 +51,15 @@ if (offending.length > 0) {
   console.error(`the browser bundle reached server-side modules:\n${offending.join("\n")}`);
   process.exit(1);
 }
+// Check this build's outputs, so an old stylesheet cannot hide a missing CSS import.
+if (!Object.keys(result.metafile.outputs).some((file) => resolve(file) === resolve(out, "app.css"))) {
+  console.error("owner app build did not emit app.css");
+  process.exit(1);
+}
 writeFileSync(
   resolve(out, "index.html"),
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-    '<title>SpeedWrit</title><script type="module" src="/owner-app/app.js"></script></head><body><div id="root"></div></body></html>\n',
+    '<title>SpeedWrit</title><link rel="stylesheet" href="/owner-app/app.css"><script type="module" src="/owner-app/app.js"></script></head><body><div id="root"></div></body></html>\n',
 );
 writeFileSync(resolve(out, "receipt-key.json"), `${JSON.stringify({ key_id: keyId, public_key_b64url: publicKey })}\n`);
 console.log(`built ${out}: ${inputs.length} inputs, key ${keyId}`);

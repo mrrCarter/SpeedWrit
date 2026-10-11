@@ -22,6 +22,7 @@ function ownerAppDir(keyId) {
   const dir = mkdtempSync(join(tmpdir(), "owner-app-"));
   writeFileSync(join(dir, "index.html"), '<!doctype html><script type="module" src="/owner-app/app.js"></script>');
   writeFileSync(join(dir, "app.js"), "console.log('owner app');");
+  writeFileSync(join(dir, "app.css"), "body { color: white; }");
   writeFileSync(join(dir, "receipt-key.json"), JSON.stringify({ key_id: keyId, public_key_b64url: "unused-here" }));
   return dir;
 }
