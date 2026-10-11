@@ -47,7 +47,7 @@ ChatGPT / Grok ──propose_send──▶ /mcp ──▶ GATE (code checks, fix
                                       ACCEPTED | NOT_SENT | UNKNOWN  (+ receipt, same transaction)
 ```
 
-- **Gate order:** job exists for this connection → rate limit → job active → not expired → dispatch not stopped → exactly one recipient → recipient is the job's → send limit → fields within rules (length, single line, no control chars, no URL) → render → other-client mention → AI review (can only add a hold).
+- **Gate order:** job exists for this connection → rate limit → job active → not expired → dispatch not stopped → exactly one recipient → recipient is the job's → send limit → fields within rules (length, single line, no control chars, no URL) → other-client mention → render → AI review (can only add a hold).
 - **Invariants the code keeps:** a version is immutable after insert; at most one approval and one dispatch per version (unique constraints); `sends_reserved` never exceeds `max_sends` (conditional update under lock); no receipt, no change; dispatch sends the stored MIME bytes, nothing is re-rendered.
 - **STOP** sets `dispatch_enabled = false` first (instant, `STOP_ENGAGED`), then revokes the Google token. It blocks every reservation that starts afterwards; nothing recalls an email already submitted.
 - **UNKNOWN** (timeout, reset, 5xx) keeps the reservation and never resends; the owner resolves it ("I see it" / "It did not arrive"), with a receipt naming the owner as the source.
@@ -63,7 +63,7 @@ OAuth per the MCP authorization spec: `/.well-known/oauth-protected-resource`, `
 - **ChatGPT** — custom MCP server at `HOST/mcp`, OAuth. Used for the live acceptance run.
 - **Grok** — three ways in: the grok.com connector, the Grok Bot desktop app (both OAuth), or `packages/grokbot`, a terminal client that calls the same four tools over the xAI Responses API (`npm run -w packages/grokbot build`; set `SPEEDWRIT_MCP_URL` and `XAI_API_KEY`; `node packages/grokbot/dist/cli.js doctor | ask | demo`). Grok support merged after the live acceptance run and was not part of it. Four review follow-ups on the terminal client are open (conversation state across turns, token-refresh locking, output redaction, HTTP deadlines); until they land, run one grokbot process at a time and do not present its raw output as evidence.
 
-The same gate governs every client. The client's model name is a declared label in receipts, not a verified identity.
+The same gate governs every client. Receipts record the client's self-declared name (`client_label`; Grok Bot, for example, registers as "Cursor") as given, not as a verified identity.
 
 ## Owner app
 
