@@ -74,6 +74,11 @@ test("health, the OAuth metadata and the 401s answer", async () => {
   assert.equal(mcp.status, 401);
   assert.equal(mcp.headers.get("www-authenticate"), `Bearer resource_metadata="${HOST}/.well-known/oauth-protected-resource"`);
   assert.deepEqual(await (await fetch(`${base}/owner/me`)).json(), { error: "sign_in" });
+  for (const path of ["/owner/integrations", "/owner/alerts/preferences", "/owner/alerts/test"]) {
+    const response = await fetch(`${base}${path}`);
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: "sign_in" });
+  }
 });
 
 test("the owner app is served under its CSP, and / leads to it", async () => {
