@@ -363,6 +363,24 @@ export const SCENARIOS: Scenario[] = [
     },
   },
   {
+    id: "j-revise-conn",
+    group: "Connections & jobs",
+    title: "Revise through a newly connected agent (PR #28 review)",
+    expect: "revision logged under that connection · another connection can't revise",
+    run: async (e) => {
+      const mine = await e.connectAgent("ChatGPT-SpeedWrit", "oauth");
+      const id = mine.connection?.id as string;
+      const s = e.getState();
+      const { draft } = draftFrom(STARTER_LINES.map((l) => parseLine(l, s.contacts, s.clock)));
+      const made = await e.confirmSendJob(draft, id);
+      const v1 = await e.proposeSend({ connectionId: id, jobId: made.jobId as string, to: "dana@acme.test", custom: { subject: "Kickoff?", body: "Hi Dana, does Thursday at 2pm work?" } });
+      const other = await e.reviseSend(v1.proposalId as string, { connectionId: PRIMARY_CONNECTION_ID, custom: { subject: "Kickoff?", body: "Hi Dana, does Monday work?" } });
+      const v2 = await e.reviseSend(v1.proposalId as string, { connectionId: id, custom: { subject: "Kickoff?", body: "Hi Dana, does Friday at 10am work?" } });
+      const logged = e.getState().agentLog.find((x) => x.tool === "revise_proposal" && x.result.version === 2);
+      return [eq("held", v1.status, "pending_approval"), eq("other connection", other.reasonCode, "proposal_not_found"), eq("revised", v2.version, 2), eq("logged under", logged?.connectionId, id)];
+    },
+  },
+  {
     id: "s-notarrived",
     group: "Send · job-bound email",
     title: "UNKNOWN, then owner says it did not arrive",

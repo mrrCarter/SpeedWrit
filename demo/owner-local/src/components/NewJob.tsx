@@ -3,8 +3,21 @@ import { draftFrom, parseLine, STARTER_LINES, type LineState } from "../domain/f
 import { useEngine, useEngineState } from "../engineContext";
 import { Card, Chip, fmtTime } from "./ui";
 
-function chipOf(st: LineState) {
-  if (st.status === "unmatched") return <Chip tone="plain">not a limit</Chip>;
+/** Near misses get the exact phrase the parser (and the live app) accepts, instead of a silent "not a limit". */
+function suggestion(line: string): string | null {
+  const t = line.toLowerCase();
+  if (/expir|tonight|until|valid/.test(t)) return "expires tonight";
+  if (/\bsends?\b|emails?|messages?|max|at most/.test(t)) return "two sends max";
+  if (/custom|wording|approv|ask/.test(t)) return "ask me before custom wording";
+  if (/dana|bo\b|email|only|recipient/.test(t)) return "only email Dana";
+  return null;
+}
+
+function chipOf(st: LineState, line: string) {
+  if (st.status === "unmatched") {
+    const hint = suggestion(line);
+    return <Chip tone="hold">{hint ? `not a limit: did you mean "${hint}"?` : "not a limit: try the examples above"}</Chip>;
+  }
   if (st.status === "needs_detail") return <Chip tone="hold">{st.why}</Chip>;
   const l = st.limit;
   if (l.kind === "recipient") return <Chip tone="bad">Never: anyone else · only {l.label}</Chip>;
@@ -14,86 +27,88 @@ function chipOf(st: LineState) {
   return <Chip tone="plain">already on for every job: no {l.what}</Chip>;
 }
 
+/** One screen: type the limits, see what each line means, see the whole job, confirm. */
 export function NewJob({ done }: { done: () => void }) {
   const s = useEngineState();
   const engine = useEngine();
   const [text, setText] = useState("");
-  const [review, setReview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const agents = s.agentConnections.filter((a) => !a.revoked);
   const [agentId, setAgentId] = useState<string>("");
-  const agent = agents.find((a) => a.id === agentId) ?? agents[0];
+  const agent = agents.find((a) => a.id === agentId) ?? agents[agents.length - 1];
 
   const lines = text.split("\n").filter((l) => l.trim() !== "");
   const states = useMemo(() => lines.map((l) => parseLine(l, s.contacts, s.clock)), [text, s.contacts, s.clock]); // eslint-disable-line react-hooks/exhaustive-deps
   const { draft, missing, problems } = draftFrom(states);
-  const ready = missing.length === 0 && problems.length === 0 && !!agent;
+  const ready = missing.length === 0 && problems.length === 0 && !!agent && !!draft.recipient && !!draft.maxSends && !!draft.expiresAt;
 
   if (agents.length === 0) {
-    return <Card sunk><p className="muted">Connect an agent first (Connections). A job is bound to one agent connection.</p></Card>;
-  }
-
-  if (review && draft.recipient && draft.maxSends && draft.expiresAt && agent) {
-    const never = [`Anyone other than ${draft.recipient}`, `More than ${draft.maxSends} ${draft.maxSends === 1 ? "send" : "sends"}`, `After ${fmtTime(draft.expiresAt)}`, "Links, Cc, Bcc, attachments", ...(draft.allowCustom ? [] : ["Wording outside the template"])];
-    const askMe = draft.allowCustom ? ["Wording outside the template"] : [];
     return (
-      <Card title="Confirm this job">
-        <p>Send {draft.recipientLabel} a recap of our call.</p>
-        <div className="rule"><span className="k">recipient</span><span>{draft.recipient}</span></div>
-        <div className="rule"><span className="k">sends</span><span>{draft.maxSends}</span></div>
-        <div className="rule"><span className="k">expires</span><span>{fmtTime(draft.expiresAt)}</span></div>
-        <div className="rule"><span className="k">agent</span><span>{agent.label} · {agent.kind === "oauth" ? "OAuth" : "fallback"}</span></div>
-        <div className="grid g3" style={{ marginTop: 12 }}>
-          <div><h3 style={{ color: "var(--bad)" }}>Never</h3>{never.map((x) => <div key={x}>· {x}</div>)}</div>
-          <div><h3 style={{ color: "var(--hold)" }}>Ask me</h3>{askMe.length ? askMe.map((x) => <div key={x}>· {x}</div>) : <div className="faint">nothing</div>}</div>
-          <div><h3 style={{ color: "var(--ok)" }}>Runs without asking</h3><div>· The recap template with fields inside their rules, to {draft.recipient}</div></div>
-        </div>
-        {!draft.allowCustom && <p className="hold" style={{ color: "var(--hold)", marginTop: 10 }}>No "ask me before custom wording" line: custom wording will be refused, not held.</p>}
-        {error && <p className="fail">{error}</p>}
-        <hr />
+      <Card title="New job">
+        <p className="muted">A job is bound to one agent connection, so connect ChatGPT first. Then type the job's limits here, one per line.</p>
         <div className="row">
-          <button className="btn" onClick={() => setReview(false)}>Back</button>
-          <span className="spacer" />
-          <button
-            className="btn primary"
-            onClick={async () => {
-              const r = await engine.confirmSendJob(draft, agent.id);
-              if (r.ok) {
-                setText("");
-                setReview(false);
-                done();
-              } else setError(r.message);
-            }}
-          >
-            Confirm job
-          </button>
+          <button className="btn primary" onClick={() => void engine.connectAgent("ChatGPT-SpeedWrit", "oauth")}>Connect ChatGPT (OAuth)</button>
+          <span className="faint">or use Connections for the consent screen or a fallback URL</span>
         </div>
       </Card>
     );
   }
 
+  const never = [
+    draft.recipient ? `Anyone other than ${draft.recipient}` : "Anyone but the one recipient (add: only email Dana)",
+    draft.maxSends ? `More than ${draft.maxSends} ${draft.maxSends === 1 ? "send" : "sends"}` : "More than N sends (add: two sends max)",
+    draft.expiresAt ? `After ${fmtTime(draft.expiresAt)}` : "After the expiry (add: expires tonight)",
+    "Links, Cc, Bcc, attachments",
+    ...(draft.allowCustom ? [] : ["Wording outside the template"]),
+  ];
+
+  const confirm = async () => {
+    if (!agent) return;
+    const r = await engine.confirmSendJob(draft, agent.id);
+    if (r.ok) {
+      setText("");
+      setError(null);
+      done();
+    } else setError(r.message);
+  };
+
   return (
-    <Card title="New job" right={<button className="btn small ghost" onClick={() => setText(STARTER_LINES.join("\n"))}>Use starter lines</button>}>
-      <p className="muted">One limit per line. For example: <code>only email Dana</code>, <code>two sends max</code>, <code>expires tonight</code>, <code>ask me before custom wording</code>.</p>
-      <textarea className="mono-box" style={{ width: "100%", minHeight: 120 }} value={text} onChange={(e) => setText(e.target.value)} placeholder={STARTER_LINES.join("\n")} />
-      <div className="rows" style={{ marginTop: 10 }}>
-        {lines.map((l, i) => (
-          <div key={i} className="row"><code style={{ minWidth: 260 }}>{l}</code>{states[i] && chipOf(states[i])}</div>
-        ))}
-      </div>
-      <hr />
-      <div className="row">
-        {agents.length > 1 && (
-          <label className="row muted">agent
-            <select className="btn small" value={agent?.id} onChange={(e) => setAgentId(e.target.value)}>
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.label} · {a.kind}</option>)}
-            </select>
-          </label>
+    <div className="grid">
+      <Card title="New job" right={<button className="btn small" onClick={() => setText(STARTER_LINES.join("\n"))}>Use starter lines</button>}>
+        <p className="muted">One limit per line, for example: <code>only email Dana</code> · <code>two sends max</code> · <code>expires tonight</code> · <code>ask me before custom wording</code></p>
+        <textarea className="mono-box" style={{ width: "100%", minHeight: 110 }} value={text} onChange={(e) => setText(e.target.value)} aria-label="Job limits, one per line" />
+        {lines.length > 0 && (
+          <div className="rows" style={{ marginTop: 10 }}>
+            {lines.map((l, i) => (
+              <div key={i} className="row"><code style={{ minWidth: 260 }}>{l}</code>{states[i] && chipOf(states[i], l)}</div>
+            ))}
+          </div>
         )}
-        <span className="muted">{missing.length ? `Still needed: ${missing.join(", ")}` : problems[0] ?? "Ready to review."}</span>
-        <span className="spacer" />
-        <button className="btn primary" disabled={!ready} onClick={() => setReview(true)}>Use these limits</button>
-      </div>
-    </Card>
+      </Card>
+
+      <Card title="This job" right={ready ? <Chip tone="ok">ready to confirm</Chip> : <Chip tone="hold">{missing.length ? `still needed: ${missing.join(", ")}` : problems[0] ?? "type the limits above"}</Chip>}>
+        <div className="grid g3">
+          <div><h3 style={{ color: "var(--bad)" }}>Never</h3>{never.map((x) => <div key={x}>· {x}</div>)}</div>
+          <div><h3 style={{ color: "var(--hold)" }}>Ask me</h3>{draft.allowCustom ? <div>· Wording outside the template</div> : <div className="faint">nothing (add: ask me before custom wording)</div>}</div>
+          <div><h3 style={{ color: "var(--ok)" }}>Runs without asking</h3><div>· The recap template, fields inside their rules{draft.recipient ? `, to ${draft.recipient}` : ""}</div></div>
+        </div>
+        {!draft.allowCustom && lines.length > 0 && <p style={{ color: "var(--hold)", marginTop: 10 }}>Without "ask me before custom wording", custom wording is refused, not held.</p>}
+        {error && <p className="fail">{error}</p>}
+        <hr />
+        <div className="row">
+          {agents.length > 1 ? (
+            <label className="row muted">agent
+              <select className="btn small" value={agent?.id} onChange={(e) => setAgentId(e.target.value)}>
+                {agents.map((a) => <option key={a.id} value={a.id}>{a.label} · {a.kind}</option>)}
+              </select>
+            </label>
+          ) : (
+            <span className="muted">agent: {agent?.label} · {agent?.kind === "oauth" ? "OAuth" : "fallback"}</span>
+          )}
+          <span className="spacer" />
+          <button className="btn primary" disabled={!ready} onClick={() => void confirm()}>Confirm job</button>
+        </div>
+      </Card>
+    </div>
   );
 }

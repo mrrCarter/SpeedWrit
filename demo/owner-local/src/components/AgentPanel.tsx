@@ -71,7 +71,7 @@ export function AgentPanel({ close }: { close: () => void }) {
             <button className="btn small" disabled={busy || !job} onClick={() => send("Do the Tuesday recap for Dana. Topic: onboarding call.", "dana@acme.test")}>Recap to Dana</button>
             <button className="btn small" disabled={busy || !job} onClick={() => send("Send the same recap to Bo at Birch too.", "bo@birch.test")}>Same recap to Bo</button>
             <button className="btn small" disabled={busy || !job} onClick={() => job && run(() => engine.proposeSend({ connectionId: agent.id, jobId: job.id, to: "dana@acme.test", custom: { subject: "Kickoff?", body: NOTE }, prompt: "Dana needs a short custom note asking if Thursday at 2pm works for a kickoff." }))}>Custom note: Thu 2pm</button>
-            <button className="btn small" disabled={busy || !pending} onClick={() => pending && run(() => engine.reviseSend(pending.id, { custom: { subject: "Kickoff?", body: NOTE.replace("Thursday at 2pm", "Friday at 10am") }, prompt: "Make it Friday at 10am instead." }))}>Make it Fri 10am</button>
+            <button className="btn small" disabled={busy || !pending} onClick={() => pending && run(() => engine.reviseSend(pending.id, { connectionId: agent.id, custom: { subject: "Kickoff?", body: NOTE.replace("Thursday at 2pm", "Friday at 10am") }, prompt: "Make it Friday at 10am instead." }))}>Make it Fri 10am</button>
             <button className="btn small" disabled={busy || !job} onClick={() => send("Send Dana one more reminder.", "dana@acme.test")}>One more reminder</button>
             <select className="btn small" value="" disabled={busy || !job} onChange={(e) => MORE[e.target.value]?.()}>
               <option value="">More tests…</option>
