@@ -72,6 +72,8 @@ test("schema: the tables", async () => {
     "oauth_codes",
     "oauth_pending_authorizations",
     "oauth_secret_paths",
+    "owner_alert_outbox",
+    "owner_alert_preferences",
     "owner_sessions",
     "owner_sign_ins",
     "owners",
