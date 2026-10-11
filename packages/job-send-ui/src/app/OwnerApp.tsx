@@ -11,6 +11,7 @@ import { SAY } from "../lib/copy";
 import type { Contact } from "../lib/frontDoor";
 import { ConfirmJob } from "../screens/ConfirmJob";
 import { Connect } from "../screens/Connect";
+import { AgentConnectionSetup } from "../screens/AgentConnectionSetup";
 import { ExceptionCard, type PendingVersion } from "../screens/ExceptionCard";
 import { FlightRecorder } from "../screens/FlightRecorder";
 import { FrontDoor, type CompleteDraft } from "../screens/FrontDoor";
@@ -79,7 +80,13 @@ const sameSitePath = (href: string) => (href.startsWith("/") && !href.startsWith
 
 function ConnectView({ api, connectGmailHref, call }: { api: OwnerApi; connectGmailHref: string; call: ReturnType<typeof useCall>["run"] }) {
   const [state, setState] = useState<ConnectState | null>(null);
-  const load = useCallback(() => void call(() => api.connectState()).then((next) => next && setState(next)), [api, call]);
+  const refresh = useCallback(async () => {
+    const next = await api.connectState();
+    if (!next) throw new OwnerApiError(200, "unconfirmed_response");
+    setState(next);
+    return next;
+  }, [api]);
+  const load = useCallback(() => void call(refresh), [call, refresh]);
   useEffect(load, [load]);
   if (!state) return <p>Loading…</p>;
   const connectGmail = sameSitePath(connectGmailHref);
@@ -97,6 +104,12 @@ function ConnectView({ api, connectGmailHref, call }: { api: OwnerApi; connectGm
       ) : state.gmail.status === "needs_reconnect" ? (
         <a href={connectGmail}>Reconnect Gmail</a>
       ) : null}
+      <AgentConnectionSetup
+        api={api}
+        connection={state.agentConnectionId ? { id: state.agentConnectionId, label: state.agentConnection?.label ?? "Agent" } : null}
+        call={call}
+        reload={refresh}
+      />
     </>
   );
 }
