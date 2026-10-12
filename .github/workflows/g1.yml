@@ -5,7 +5,9 @@ on:
     paths:
       - '.github/workflows/g1.yml'
       - 'deploy/g1/**'
+      - 'deploy/transport-health/**'
       - 'scripts/g1-preflight*'
+      - 'scripts/g1-transport-health*'
       - 'packages/**'
       - 'package*.json'
   push:
@@ -13,7 +15,9 @@ on:
     paths:
       - '.github/workflows/g1.yml'
       - 'deploy/g1/**'
+      - 'deploy/transport-health/**'
       - 'scripts/g1-preflight*'
+      - 'scripts/g1-transport-health*'
       - 'packages/**'
       - 'package*.json'
 
@@ -32,7 +36,7 @@ jobs:
         with:
           node-version: 22
       - name: Test readiness and private build environment
-        run: node --test scripts/g1-preflight.test.mjs deploy/g1/build.test.mjs
+        run: node --test scripts/g1-preflight.test.mjs scripts/g1-transport-health.test.mjs deploy/g1/build.test.mjs
       - name: Compile Azure templates without authentication
         run: |
           az bicep install
