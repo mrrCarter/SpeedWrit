@@ -1,6 +1,6 @@
 // Builds the SpeedWrit Sparta World from Sparta's customer-desk starter. The team's directives
 // become the mission's policy lines (what the agent is told) and named checks (how the result is
-// graded, hidden from the agent). Also writes a known-answer agent and a control agent that breaks
+// graded, omitted from the public task payload; not a security boundary). Also writes a known-answer agent and a control agent that breaks
 // D2, so the checks are shown to pass AND fail. See sparta/README.md.
 // Usage: node sparta/make-world.mjs <starter-dir> <out-dir>
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
