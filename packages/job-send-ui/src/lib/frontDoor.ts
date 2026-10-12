@@ -58,6 +58,10 @@ const COUNT_PATTERNS = [
   new RegExp(`\\b${NUMBER}\\s+${MESSAGES}\\s+(?:max|maximum|at\\s+most|tops)\\b`, "i"),
   new RegExp(`\\b(?:max|maximum|at\\s+most|up\\s+to|no\\s+more\\s+than|only)\\s+(?:of\\s+)?${NUMBER}\\s+${MESSAGES}\\b`, "i"),
 ];
+// Recognition only: an unsupported quantity must not disappear into a later AI/content match.
+// A unit is required, so a price such as "$300 refunds" or a clock time is not a send count.
+const COUNT_QUANTITY = `(?:\\d\\S*|${Object.keys(NUMBER_WORDS).join("|")}|zero|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|half|quarter|dozen|couple|few|several)`;
+const COUNT_BEARING = new RegExp(`\\b${COUNT_QUANTITY}\\s+${MESSAGES}\\b|\\b${MESSAGES}\\s+(?:(?:max|maximum|at\\s+most|up\\s+to|no\\s+more\\s+than|only)\\s+)?${COUNT_QUANTITY}(?=$|[\\s,;.!])`, "i");
 const RECIPIENT = /^(?:only|just)\s+(?:email|e-mail|mail|message|contact|send\s+to|write\s+to)\s+(.+?)\s*[.!]?$/i;
 const TONIGHT = /\b(?:expires?|ends?|until|till|good\s+until|valid\s+until)\s+tonight\b|^tonight$/i;
 const UNTIL_TIME = /\b(?:expires?\s+at|ends?\s+at|until|till|by)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?(?=\s*[.!]?$|\s)/i;
@@ -189,6 +193,9 @@ export function parseLine(line: string, ctx: ParseContext): LineState {
   }
 
   const count = COUNT_PATTERNS.map((pattern) => pattern.exec(text)).find((match) => match !== null);
+  if (!count && !recipient && COUNT_BEARING.test(text)) {
+    return { status: "needs_detail", kind: "count", why: "This line includes an unsupported send count. Use one whole-number limit per line, such as three sends max." };
+  }
   if (count) {
     const maxSends = parseNumber(count[1] ?? "");
     // A substring is not a count rule: never truncate decimals/signs or drop a second condition.

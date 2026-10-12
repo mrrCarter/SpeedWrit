@@ -126,6 +126,17 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(parseLine(text, CTX)).not.toMatchObject({ status: "limit" });
   });
 
+  it.each(["no more than 0.5 emails, avoid rude tone", "up to 1/3 sends, don't sound rude", "only -3 messages, avoid rude tone", "only +3 messages, avoid rude tone", "up to 1,000 messages, avoid rude tone", "three emails, avoid rude tone", "twenty emails, avoid rude tone", "avoid rude tone after one email", "only send max 3, avoid rude tone", "only 1e3 emails, avoid rude tone", "only 0x03 emails, avoid rude tone", "only 3% emails, avoid rude tone"])("does not reinterpret an unsupported count as AI review in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
+  });
+
+  it("preserves recipient/time punctuation and content prices that are not message counts", () => {
+    const contact = { name: "Dana", email: "dana.3+tag@example.test" };
+    expect(limitOf(parseLine(`only email ${contact.email}`, { ...CTX, contacts: [contact] }))).toMatchObject({ kind: "recipient", email: contact.email });
+    expect(limitOf(parseLine("until 5:30pm", CTX))).toMatchObject({ kind: "expiry", expiresAt: "2026-10-12T00:30:00.000Z" });
+    expect(limitOf(parseLine("avoid promising $300 refunds in emails", CTX))).toMatchObject({ kind: "ai_review" });
+  });
+
   it("'don't sound rude' maps to an existing AI-review check: Ask me, labeled AI-reviewed, may miss", () => {
     const state = parseLine("don't sound rude", CTX);
     expect(limitOf(state)).toEqual({ kind: "ai_review", checks: ["hostile_tone"] });

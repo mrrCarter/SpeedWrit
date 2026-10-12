@@ -119,6 +119,15 @@ describe("LiveJobForm", () => {
     expect(onUse).not.toHaveBeenCalled();
   });
 
+  it.each(["no more than 0.5 emails, avoid rude tone", "up to 1/3 sends, don't sound rude", "only -3 messages, avoid rude tone", "only +3 messages, avoid rude tone", "up to 1,000 messages, avoid rude tone", "three emails, avoid rude tone", "twenty emails, avoid rude tone", "avoid rude tone after one email", "only send max 3, avoid rude tone", "only 1e3 emails, avoid rude tone", "only 0x03 emails, avoid rude tone", "only 3% emails, avoid rude tone", "no more than 0.5 emails, no links"])("cannot drop the count and submit default three for %j", (rule) => {
+    const { onUse, review } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: rule } });
+    expect(screen.getByText("Needs one detail")).toBeInTheDocument();
+    expect(review()).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+  });
+
   it("keeps typed expiry fixed and rechecks it when submitting later", () => {
     let clock = NOW();
     const { onUse, review } = setup(CONTACTS, () => clock);
