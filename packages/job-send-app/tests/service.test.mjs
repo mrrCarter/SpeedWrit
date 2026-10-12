@@ -94,6 +94,26 @@ test("the owner app is served under its CSP, and / leads to it", async () => {
   assert.equal(home.status, 302);
 });
 
+test("the built service includes public information pages without sign-in or provider requests", async () => {
+  const priorFetches = fetched.length;
+  for (const path of ["/about", "/privacy", "/terms", "/public.css"]) {
+    const response = await fetch(`${base}${path}`, { redirect: "manual" });
+    assert.equal(response.status, 200, path);
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.equal(response.headers.get("location"), null);
+    assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'none'/);
+    const body = await response.text();
+    assert.ok(body.length > 0);
+    assert.equal(body.includes("dana@test.example"), false);
+    assert.equal(body.includes("receipt-key.json"), false);
+    const head = await fetch(`${base}${path}`, { method: "HEAD" });
+    assert.equal(head.status, 200);
+    assert.equal(head.headers.get("content-length"), String(Buffer.byteLength(body)));
+    assert.equal(await head.text(), "");
+  }
+  assert.equal(fetched.length, priorFetches, "public pages do not call a provider");
+});
+
 test("sign-in and Connect Gmail start their Google flows; Connect Gmail needs a session first", async () => {
   const signIn = await fetch(`${base}/auth/sign-in?return_to=/owner-app/`, { redirect: "manual" });
   assert.equal(signIn.status, 302);
