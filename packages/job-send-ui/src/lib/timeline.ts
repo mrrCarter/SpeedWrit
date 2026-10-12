@@ -91,6 +91,7 @@ export function buildTimeline(receipts: readonly TimelineReceipt[]): TimelineRow
   for (const receipt of ordered) {
     const base = { receiptId: receipt.id, seq: receipt.seq, ts: receipt.ts, badges: [] as string[] };
     const reason = text(receipt.detail?.reason_code) ?? text(receipt.detail?.reason) ?? text(receipt.detail?.error_class);
+    const phone = receipt.detail?.channel === "phone";
     switch (receipt.type) {
       case "AI_REVIEW":
         rows.push({ ...base, label: SAY.aiReview, tone: "info", control: "none", reason, explanation: reviewExplanation(receipt.detail?.outcome) });
@@ -100,7 +101,7 @@ export function buildTimeline(receipts: readonly TimelineReceipt[]): TimelineRow
         break;
       case "APPROVAL_REFUSED":
       case "DISPATCH_REFUSED":
-        rows.push({ ...base, label: PLAIN_LABELS[receipt.type]!, tone: "info", control: "none", reason, explanation: refusalExplanation(reason) });
+        rows.push({ ...base, label: receipt.type === "APPROVAL_REFUSED" && phone ? "Phone approval not used" : PLAIN_LABELS[receipt.type]!, tone: "info", control: "none", reason, explanation: refusalExplanation(reason) });
         break;
       case "PROPOSAL_CREATED":
       case "PROPOSAL_REVISED":
@@ -112,7 +113,7 @@ export function buildTimeline(receipts: readonly TimelineReceipt[]): TimelineRow
         });
         break;
       case "APPROVAL_GRANTED":
-        rows.push({ ...base, label: `You approved version ${receipt.version ?? "?"}`, tone: "ok", control: "none" });
+        rows.push({ ...base, label: phone ? `Approved by phone · version ${receipt.version ?? "?"}` : `You approved version ${receipt.version ?? "?"}`, tone: "ok", control: "none" });
         break;
       case "PROVIDER_ACCEPTED": {
         const row: TimelineRow = { ...base, label: SAY.providerAccepted, tone: "ok", control: "none" };
@@ -153,7 +154,7 @@ export function buildTimeline(receipts: readonly TimelineReceipt[]): TimelineRow
         break;
       }
       default:
-        rows.push({ ...base, label: PLAIN_LABELS[receipt.type] ?? receipt.type, tone: "info", control: "none", reason });
+        rows.push({ ...base, label: receipt.type === "APPROVAL_REJECTED" && phone ? "Rejected by phone" : PLAIN_LABELS[receipt.type] ?? receipt.type, tone: "info", control: "none", reason });
     }
   }
   return rows;
