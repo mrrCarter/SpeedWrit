@@ -59,11 +59,31 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(parseLine("0 sends max", CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
   });
 
+  it.each(["3.5 sends max", ".3 sends max", "1,000 sends max", "1/3 sends max", "-3 sends max", "+3 sends max", "3 sends max or 5", "3 sends max and two sends max", "three sends max except on Friday"])("does not truncate a count or discard a contradictory suffix in %j", (text) => {
+    expect(parseLine(text, CTX)).not.toMatchObject({ status: "limit" });
+  });
+
+  it.each(["three sends max", "3 sends max.", "no more than 3 emails!"])("still accepts the complete count phrase %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "count", maxSends: 3 });
+  });
+
   it("'expires tonight' and 'until 6pm' are computed in the owner's time zone: Never after that", () => {
     expect(limitOf(parseLine("expires tonight", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T06:59:00.000Z" });
     expect(limitOf(parseLine("until 6pm", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T01:00:00.000Z" });
     expect(limitOf(parseLine("until 18:30", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T01:30:00.000Z" });
     expect(chipText("expires tonight")).toBe("Never: after that");
+  });
+
+  it.each(["until 5pm tomorrow", "until 5pm except Friday", "do not expire tonight", "expires tonight unless I say otherwise", "until 5pm or 6pm"])("does not discard an expiry condition or negation in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "expiry" });
+  });
+
+  it.each(["tonight", "expires tonight", "ends tonight!", "until tonight", "till tonight", "good until tonight", "valid until tonight."])("preserves the complete tonight phrase %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T06:59:00.000Z" });
+  });
+
+  it.each(["until 5pm", "until 5 p.m.", "expires at 5pm.", "ends at 5pm", "till 5pm!", "by 17:00"])("preserves the complete time phrase %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T00:00:00.000Z" });
   });
 
   it("an hour without am or pm, a time already past, or a time that doesn't exist needs one detail", () => {
@@ -79,6 +99,14 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(chipText("ask me before custom wording")).toBe("Ask me");
   });
 
+  it.each(["do not ask me before custom wording", "don't ask me before custom wording", "never check with me before custom wording", "ask me before custom wording unless I am away", "ask me before not custom wording"])("does not reverse approval wording or discard a condition in %j", (text) => {
+    expect(parseLine(text, CTX)).not.toMatchObject({ status: "limit" });
+  });
+
+  it.each(["ask me before custom wording", "ask before custom wording!", "ask me first before any new messages", "check with me before writing different words."])("preserves supported approval wording %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "approval" });
+  });
+
   it("'no links' and 'no attachments' are already on for every job: Never", () => {
     expect(limitOf(parseLine("no links", CTX))).toEqual({ kind: "builtin", what: "links" });
     expect(limitOf(parseLine("no attachments", CTX))).toEqual({ kind: "builtin", what: "attachments" });
@@ -88,6 +116,25 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(links.status === "limit" && chipFor(links).detail).toBe(LINKS_RULE);
     const attachments = parseLine("no attachments", CTX);
     expect(attachments.status === "limit" && chipFor(attachments).detail).toBe("No attachments: already on for every job");
+  });
+
+  it.each(["no links except for invoices", "do not say no links", "no attachments unless approved"])("does not discard a prohibition condition in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "content" });
+  });
+
+  it.each(["no more than 0.5 emails until tonight", "up to 1,000 messages until tonight", "only +3 messages until tonight", "up to 1/3 sends until 5pm", "until 5pm or until 4pm"])("does not salvage an expiry after an unsupported clause in %j", (text) => {
+    expect(parseLine(text, CTX)).not.toMatchObject({ status: "limit" });
+  });
+
+  it.each(["no more than 0.5 emails, avoid rude tone", "up to 1/3 sends, don't sound rude", "only -3 messages, avoid rude tone", "only +3 messages, avoid rude tone", "up to 1,000 messages, avoid rude tone", "three emails, avoid rude tone", "twenty emails, avoid rude tone", "avoid rude tone after one email", "only send max 3, avoid rude tone", "only 1e3 emails, avoid rude tone", "only 0x03 emails, avoid rude tone", "only 3% emails, avoid rude tone"])("does not reinterpret an unsupported count as AI review in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
+  });
+
+  it("preserves recipient/time punctuation and content prices that are not message counts", () => {
+    const contact = { name: "Dana", email: "dana.3+tag@example.test" };
+    expect(limitOf(parseLine(`only email ${contact.email}`, { ...CTX, contacts: [contact] }))).toMatchObject({ kind: "recipient", email: contact.email });
+    expect(limitOf(parseLine("until 5:30pm", CTX))).toMatchObject({ kind: "expiry", expiresAt: "2026-10-12T00:30:00.000Z" });
+    expect(limitOf(parseLine("avoid promising $300 refunds in emails", CTX))).toMatchObject({ kind: "ai_review" });
   });
 
   it("'don't sound rude' maps to an existing AI-review check: Ask me, labeled AI-reviewed, may miss", () => {

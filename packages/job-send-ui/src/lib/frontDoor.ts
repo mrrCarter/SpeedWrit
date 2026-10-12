@@ -58,10 +58,14 @@ const COUNT_PATTERNS = [
   new RegExp(`\\b${NUMBER}\\s+${MESSAGES}\\s+(?:max|maximum|at\\s+most|tops)\\b`, "i"),
   new RegExp(`\\b(?:max|maximum|at\\s+most|up\\s+to|no\\s+more\\s+than|only)\\s+(?:of\\s+)?${NUMBER}\\s+${MESSAGES}\\b`, "i"),
 ];
+// Recognition only: an unsupported quantity must not disappear into a later AI/content match.
+// A unit is required, so a price such as "$300 refunds" or a clock time is not a send count.
+const COUNT_QUANTITY = `(?:\\d\\S*|${Object.keys(NUMBER_WORDS).join("|")}|zero|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|half|quarter|dozen|couple|few|several)`;
+const COUNT_BEARING = new RegExp(`\\b${COUNT_QUANTITY}\\s+${MESSAGES}\\b|\\b${MESSAGES}\\s+(?:(?:max|maximum|at\\s+most|up\\s+to|no\\s+more\\s+than|only)\\s+)?${COUNT_QUANTITY}(?=$|[\\s,;.!])`, "i");
 const RECIPIENT = /^(?:only|just)\s+(?:email|e-mail|mail|message|contact|send\s+to|write\s+to)\s+(.+?)\s*[.!]?$/i;
 const TONIGHT = /\b(?:expires?|ends?|until|till|good\s+until|valid\s+until)\s+tonight\b|^tonight$/i;
 const UNTIL_TIME = /\b(?:expires?\s+at|ends?\s+at|until|till|by)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?(?=\s*[.!]?$|\s)/i;
-const APPROVAL = /\b(?:ask|check\s+with)\s+(?:me\s+)?(?:first\s+)?before\b.*\b(?:custom|own|different|new|other)\s+(?:wording|words|text|messages?|emails?)\b/i;
+const APPROVAL = /\b(?:ask|check\s+with)\s+(?:me\s+)?(?:first\s+)?before\s+(?:(?:using|sending|writing)\s+)?(?:any\s+)?(?:custom|own|different|new|other)\s+(?:wording|words|text|messages?|emails?)\b/i;
 const BUILTIN = /\b(?:no|never|don'?t\s+(?:add|include|put|send|use))\s+(?:any\s+)?(links?|urls?|attachments?|html|cc|bcc)\b/i;
 const CONTENT_CHECKS: ReadonlyArray<[AiCheck, RegExp]> = [
   ["hostile_tone", /\b(?:rude|rudely|rudeness|tone|polite|impolite|hostile|sarcastic|sarcasm|aggressive|snarky|condescending)\b/i],
@@ -79,6 +83,11 @@ const hasAllWords = (haystack: string, needle: string): boolean => {
   const want = words(needle);
   return want.length > 0 && want.every((word) => have.has(word));
 };
+
+/** An extracted phrase cannot silently discard a prefix, condition, or negation. */
+function wholePhrase(text: string, match: RegExpExecArray): boolean {
+  return match.index === 0 && (match[0] === text || match[0] === text.replace(/[.!]$/, ""));
+}
 
 function parseNumber(text: string): number {
   const lower = text.toLowerCase();
@@ -134,12 +143,15 @@ function parseExpiry(line: string, ctx: ParseContext): LineState | null {
   const today = wallParts(ctx.now.getTime(), zoneOf(ctx.timeZone));
   let hour: number;
   let minute: number;
-  if (TONIGHT.test(line)) {
+  const tonight = TONIGHT.exec(line);
+  if (tonight) {
+    if (!wholePhrase(line, tonight)) return { status: "needs_detail", kind: "expiry", why: "Use one complete expiry per line, with no extra conditions." };
     hour = 23;
     minute = 59;
   } else {
     const match = UNTIL_TIME.exec(line);
     if (!match) return null;
+    if (!wholePhrase(line, match)) return { status: "needs_detail", kind: "expiry", why: "Use one complete expiry per line, with no extra conditions." };
     hour = Number(match[1]);
     minute = match[2] === undefined ? 0 : Number(match[2]);
     const meridiem = match[3]?.toLowerCase().replace(/\./g, "");
@@ -181,22 +193,34 @@ export function parseLine(line: string, ctx: ParseContext): LineState {
   }
 
   const count = COUNT_PATTERNS.map((pattern) => pattern.exec(text)).find((match) => match !== null);
+  if (!count && !recipient && COUNT_BEARING.test(text)) {
+    return { status: "needs_detail", kind: "count", why: "This line includes an unsupported send count. Use one whole-number limit per line, such as three sends max." };
+  }
   if (count) {
     const maxSends = parseNumber(count[1] ?? "");
+    // A substring is not a count rule: never truncate decimals/signs or drop a second condition.
+    const wholeCount = wholePhrase(text, count);
     found.push(
-      Number.isInteger(maxSends) && maxSends >= 1 && maxSends <= MAX_SENDS_LIMIT
-        ? { status: "limit", limit: { kind: "count", maxSends } }
-        : { status: "needs_detail", kind: "count", why: `A job allows 1 to ${MAX_SENDS_LIMIT} sends.` },
+      !wholeCount
+        ? { status: "needs_detail", kind: "count", why: "Use one whole-number send limit per line, with no extra conditions." }
+        : Number.isInteger(maxSends) && maxSends >= 1 && maxSends <= MAX_SENDS_LIMIT
+          ? { status: "limit", limit: { kind: "count", maxSends } }
+          : { status: "needs_detail", kind: "count", why: `A job allows 1 to ${MAX_SENDS_LIMIT} sends.` },
     );
   }
 
   const expiry = parseExpiry(text, ctx);
   if (expiry) found.push(expiry);
 
-  if (APPROVAL.test(text)) found.push({ status: "limit", limit: { kind: "approval" } });
+  const approval = APPROVAL.exec(text);
+  if (approval) found.push(wholePhrase(text, approval)
+    ? { status: "limit", limit: { kind: "approval" } }
+    : { status: "needs_detail", kind: "approval", why: "Use a complete request to ask before custom wording, with no negation or extra conditions." });
 
   const builtin = BUILTIN.exec(text);
-  if (builtin) found.push({ status: "limit", limit: { kind: "builtin", what: (builtin[1] ?? "").toLowerCase() } });
+  if (builtin) found.push(wholePhrase(text, builtin)
+    ? { status: "limit", limit: { kind: "builtin", what: (builtin[1] ?? "").toLowerCase() } }
+    : { status: "needs_detail", kind: "content", why: "Use one complete prohibition per line. Exceptions and extra conditions are not supported." });
 
   const checks = CONTENT_CHECKS.filter(([, pattern]) => pattern.test(text)).map(([check]) => check);
   if (checks.length > 0) found.push({ status: "limit", limit: { kind: "ai_review", checks } });
