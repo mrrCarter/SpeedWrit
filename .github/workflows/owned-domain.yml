@@ -1,0 +1,34 @@
+name: owned-domain transport
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/owned-domain/**'
+      - 'packages/job-send-ui/src/serve/publicPages.ts'
+      - 'package-lock.json'
+      - '.github/workflows/owned-domain.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/owned-domain/**'
+      - 'packages/job-send-ui/src/serve/publicPages.ts'
+      - 'package-lock.json'
+      - '.github/workflows/owned-domain.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx -y npm@11.6.1 ci --ignore-scripts --no-audit --no-fund
+      - run: node deploy/owned-domain/build.mjs
+      - run: node --test deploy/owned-domain/transport.test.mjs
