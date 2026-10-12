@@ -110,7 +110,7 @@ export function IntegrationsCard({ load, setEnabled, test, onSignIn }: Integrati
         <p>{metadata.jev.configured ? "Server configuration is present." : "AI review is not configured."} Model: <code>{metadata.jev.model}</code>.</p>
         <p className="muted">Configuration does not confirm that a review ran or succeeded. Review flags or unavailable review can require your approval; AI review cannot approve or send.</p>
         <h3>Phone alerts · Dial</h3>
-        <p className="muted">Eligible held custom drafts or unknown email outcomes can queue a generic notice. Calls cannot approve a draft or send an email.</p>
+        <p className="muted">Drafts waiting for review or unknown email outcomes can queue a generic notice. Calls cannot approve a draft or send an email.</p>
         {!dial?.live && <p>Live calls are disabled in the server configuration.</p>}
         {uncertain ? <p>Current alert status is unconfirmed. The switch shows the last confirmed preference.</p> : pending === null && dial ? <>
           <p role="status">{STATUS[dial.status]}</p>
