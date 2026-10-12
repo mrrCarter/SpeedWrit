@@ -51,6 +51,8 @@ describe("public information routes", () => {
     expect(page.headers.location).toBeUndefined();
     expect(page.body).toContain('<html lang="en">');
     expect(page.body).toContain('<h1>');
+    expect(page.body).toContain("use the support email listed on Google's SpeedWrit consent screen");
+    expect(page.body).not.toMatch(/mailto:|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
     expect(page.body).not.toMatch(/<script|<style|<form|\son\w+=/i);
     for (const secret of [privateMarker, "private-owner@example.test", "private-cookie-marker", "untrusted-host.example", "PRIVATE_KEY_MANIFEST", "config.json", "receipt-key.json"]) expect(page.body).not.toContain(secret);
     const withQuery = await call(`${path}?token=never-reflect-this`);
@@ -66,7 +68,7 @@ describe("public information routes", () => {
       const { body } = await call(path);
       for (const link of ["/about", "/privacy", "/terms", "/owner-app/", "/public.css"]) expect(body).toContain(`href="${link}"`);
       const links = [...body.matchAll(/href="([^"]+)"/g)].map((match) => match[1]!);
-      expect(links.every((href) => ["/about", "/privacy", "/terms", "/owner-app/", "/owner-app/#/connect", "/public.css", "mailto:carther91@gmail.com"].includes(href))).toBe(true);
+      expect(links.every((href) => ["/about", "/privacy", "/terms", "/owner-app/", "/owner-app/#/connect", "/public.css"].includes(href))).toBe(true);
     }
     const css = await call("/public.css");
     expect(css.status).toBe(200); expect(css.headers["content-type"]).toBe("text/css; charset=utf-8");

@@ -2,11 +2,11 @@
 // No request, owner config, environment variable, credential or database row enters these pages.
 export const PUBLIC_PAGE_CSP = "default-src 'none'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'";
 
-const support = '<a href="mailto:carther91@gmail.com">carther91@gmail.com</a>';
+const support = "For support or data requests, use the support email listed on Google's SpeedWrit consent screen.";
 const navigation = '<nav aria-label="Public information"><a href="/about">About</a><a href="/privacy">Privacy</a><a href="/terms">Demo terms</a><a href="/owner-app/">Open SpeedWrit</a></nav>';
 
 function page(title: string, introduction: string, content: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} · SpeedWrit</title><meta name="description" content="${introduction}"><link rel="stylesheet" href="/public.css"></head><body><header><a class="brand" href="/about">SpeedWrit</a>${navigation}</header><main><p class="eyebrow">A working demo</p><h1>${title}</h1><p class="intro">${introduction}</p>${content}</main><footer>${navigation}<p>Questions or data requests: ${support}</p></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} · SpeedWrit</title><meta name="description" content="${introduction}"><link rel="stylesheet" href="/public.css"></head><body><header><a class="brand" href="/about">SpeedWrit</a>${navigation}</header><main><p class="eyebrow">A working demo</p><h1>${title}</h1><p class="intro">${introduction}</p>${content}</main><footer>${navigation}<p>${support}</p></footer></body></html>`;
 }
 
 const about = page("Email authority you can review", "Give an agent a specific email job, with limits you confirm and receipts you can verify.", `
@@ -23,7 +23,7 @@ const about = page("Email authority you can review", "Give an agent a specific e
 <p>Keep agent credentials and any private connection URL private. Owner approval happens in the owner app. Supported callback URLs and client capabilities can limit which clients connect.</p></section>
 <section><h2>Read the result carefully</h2>
 <p>Signed receipts record actions and outcomes. Provider accepted means Gmail accepted the request; it does not prove inbox delivery. An unknown outcome keeps its reserved send slot, including after an owner records that the message was not seen. Do not treat uncertainty as permission to retry.</p>
-<p>Before using the demo, read the <a href="/privacy">privacy notice</a> and <a href="/terms">demo terms</a>. Support: ${support}.</p></section>`);
+<p>Before using the demo, read the <a href="/privacy">privacy notice</a> and <a href="/terms">demo terms</a>. </p><p>${support}</p></section>`);
 
 const privacy = page("Privacy notice", "How this SpeedWrit demo handles account information, email proposals, review data and action records.", `
 <section><h2>Information the demo handles</h2>
@@ -39,10 +39,10 @@ const privacy = page("Privacy notice", "How this SpeedWrit demo handles account 
 <section><h2>Retention, stopping and data requests</h2>
 <p>This demo has no automatic deletion schedule for job and action history. Message proposals and signed receipts are retained in the database, and copies may exist in operational backups or exported evidence. Receipt rows are append-only in the application.</p>
 <p>Use the owner's Stop or disconnect controls to stop applicable future actions, and Google's account permissions to revoke Google access. A successful provider revocation removes the stored refresh token. Revocation or disconnect does not automatically erase message proposals, receipts, backups or messages already accepted by Gmail.</p>
-<p>For access, correction or deletion requests, contact ${support}. State which account and records the request concerns; do not email passwords, access tokens or private connection URLs. The operator will assess the request and applicable retained records; this notice does not promise automatic or immediate erasure.</p></section>
+<p>${support} For access, correction or deletion requests, state which account and records the request concerns; do not email passwords, access tokens or private connection URLs. The operator will assess the request and applicable retained records; this notice does not promise automatic or immediate erasure.</p></section>
 <section><h2>Your choices</h2>
 <p>Only connect accounts and provide message content you are authorized to use. Review what a job permits before confirming it. AI review may be required by that job, and optional phone notifications require an explicit owner preference. Public information pages do not require sign-in and load no analytics scripts or third-party page assets.</p>
-<p>Questions about these practices: ${support}. See also <a href="/about">how SpeedWrit works</a> and the <a href="/terms">demo terms</a>.</p></section>`);
+<p>${support} See also <a href="/about">how SpeedWrit works</a> and the <a href="/terms">demo terms</a>.</p></section>`);
 
 const terms = page("Demo terms", "Use SpeedWrit only with accounts, recipients and message content you are authorized to use.", `
 <section><h2>Your authority and review</h2>
@@ -54,7 +54,7 @@ const terms = page("Demo terms", "Use SpeedWrit only with accounts, recipients a
 <p>This is a working demo. Availability, supported clients, account access and permitted recipients may be limited. The demo does not guarantee a review result, notification, provider acceptance or delivery.</p></section>
 <section><h2>Questions and data handling</h2>
 <p>Read the <a href="/privacy">privacy notice</a> before connecting. Google, TypeSafe, Dial and your agent provider have their own service requirements. These demo terms do not change those providers' terms.</p>
-<p>Contact ${support} for support or questions about this demo. <a href="/about">Return to About SpeedWrit</a>.</p></section>`);
+<p>${support} <a href="/about">Return to About SpeedWrit</a>.</p></section>`);
 
 const css = `:root{color-scheme:light;font:17px/1.65 system-ui,sans-serif;color:#24252a;background:#faf9f6}*{box-sizing:border-box}body{margin:0}header,main,footer{max-width:900px;margin:auto;padding:1.5rem}header{border-bottom:1px solid #dedbd4;display:flex;gap:1.5rem;align-items:center;justify-content:space-between}.brand{font-size:1.3rem;font-weight:750;text-decoration:none;color:#24252a}nav{display:flex;flex-wrap:wrap;gap:.5rem 1.2rem}a{color:#70521d;text-underline-offset:.2em}a:focus-visible{outline:3px solid #70521d;outline-offset:4px}main{padding-top:3rem;padding-bottom:3rem}h1{font-size:clamp(2rem,5vw,3.3rem);line-height:1.12;letter-spacing:-.035em;max-width:760px}h2{font-size:1.35rem;line-height:1.3;margin-top:2.4rem}.eyebrow{font-size:.8rem;font-weight:650;text-transform:uppercase;letter-spacing:.12em;color:#756b59}.intro{font-size:1.2rem;color:#59564f}li{margin:.8rem 0}code{font-size:.95em;background:#eeece5;padding:.1rem .3rem;border-radius:4px}.button{display:inline-block;background:#70521d;color:#fff;padding:.65rem 1rem;border-radius:7px;text-decoration:none;font-weight:650}footer{border-top:1px solid #dedbd4;font-size:.9rem;color:#59564f}footer p{overflow-wrap:anywhere}@media(max-width:600px){header{align-items:flex-start;flex-direction:column}main{padding-top:1.5rem}}`;
 
