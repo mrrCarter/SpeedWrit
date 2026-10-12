@@ -46,15 +46,17 @@ function ConsentDetails({ clientName, redirectUri, ownerEmail }: { clientName: s
   const target = describeRedirect(redirectUri);
   return (
     <>
-      <h2>Connect an agent to SpeedWrit</h2>
-      <p>
+      <p className="consent-eyebrow">Agent connection</p>
+      <h1>Connect an agent to SpeedWrit</h1>
+      <p className="consent-intro">Allow connects this agent. It does not create a job or send an email.</p>
+      <p className="consent-identity">
         {/* <bdi> isolates the declared name: a direction override inside it cannot reorder "(declared)" (machine, #512). */}
         <strong>
           <bdi>{clientName}</bdi>
         </strong>{" "}
         (declared) asks to act for <strong>{ownerEmail}</strong>.
       </p>
-      <dl>
+      <dl className="consent-details">
         <dt>Returns to</dt>
         <dd>
           {target.where}
@@ -68,6 +70,7 @@ function ConsentDetails({ clientName, redirectUri, ownerEmail }: { clientName: s
         <dt>It may not</dt>
         <dd>Read your inbox, change a job, or approve its own messages. It has no jobs until you confirm one.</dd>
       </dl>
+      <p className="consent-check">Continue only if you recognize this request and the return address.</p>
     </>
   );
 }
@@ -83,16 +86,16 @@ const NOT_GRANTABLE = "This request asks for something SpeedWrit does not grant.
 export function Consent({ request, ownerEmail, onAllow, onDeny }: ConsentProps) {
   const grantable = request.scope === CONSENT_SCOPE;
   return (
-    <section aria-label="Connect an agent">
+    <section className="consent-card" aria-label="Connect an agent">
       <ConsentDetails clientName={request.clientName} redirectUri={request.redirectUri} ownerEmail={ownerEmail} />
       {grantable ? (
-        <button type="button" onClick={() => onAllow(request)}>
+        <button className="consent-allow" type="button" onClick={() => onAllow(request)}>
           Allow
         </button>
       ) : (
         <p role="alert">{NOT_GRANTABLE}</p>
       )}
-      <button type="button" onClick={() => onDeny(request)}>
+      <button className="consent-deny" type="button" onClick={() => onDeny(request)}>
         Deny
       </button>
     </section>
@@ -106,6 +109,8 @@ export function Consent({ request, ownerEmail, onAllow, onDeny }: ConsentProps) 
  */
 export interface ConsentView {
   requestId: string;
+  /** Server-generated CSP nonce for the static stylesheet, never part of the posted form. */
+  styleNonce: string;
   request: ConsentRequest;
   ownerEmail: string;
 }
@@ -121,21 +126,22 @@ export const CONSENT_FORM_ACTION = "/oauth/authorize";
 export function ConsentForm({ view }: { view: ConsentView }) {
   const grantable = view.request.scope === CONSENT_SCOPE;
   return (
-    <section aria-label="Connect an agent">
+    <section className="consent-card" aria-label="Connect an agent">
       <ConsentDetails clientName={view.request.clientName} redirectUri={view.request.redirectUri} ownerEmail={view.ownerEmail} />
-      <form method="post" action={CONSENT_FORM_ACTION}>
+      <form className="consent-actions" method="post" action={CONSENT_FORM_ACTION}>
         <input type="hidden" name="request_id" value={view.requestId} />
         {grantable ? (
-          <button type="submit" name="decision" value="allow">
+          <button className="consent-allow" type="submit" name="decision" value="allow">
             Allow
           </button>
         ) : (
           <p role="alert">{NOT_GRANTABLE}</p>
         )}
-        <button type="submit" name="decision" value="deny">
+        <button className="consent-deny" type="submit" name="decision" value="deny">
           Deny
         </button>
       </form>
+      <p className="consent-footnote">Deny returns to the requesting app without connecting it.</p>
     </section>
   );
 }
