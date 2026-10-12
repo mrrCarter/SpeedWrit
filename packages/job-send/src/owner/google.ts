@@ -7,6 +7,8 @@ import { createHash, createPublicKey, verify as verifySignature, type JsonWebKey
 
 export const GOOGLE_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+export const GOOGLE_TOKENINFO_ENDPOINT = "https://oauth2.googleapis.com/tokeninfo";
+export const GOOGLE_TOKENINFO_TIMEOUT_MS = 5_000;
 export const GOOGLE_JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs";
 /** Google signs ID tokens with either issuer string. */
 export const GOOGLE_ISSUERS: readonly string[] = Object.freeze(["https://accounts.google.com", "accounts.google.com"]);
@@ -31,7 +33,7 @@ export function googleClientConfigFromEnv(env: Record<string, string | undefined
 /** The slice of fetch this module uses. */
 export type FetchLike = (
   url: string,
-  init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal },
+  init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal; redirect?: "manual" },
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 /** RFC 7636 S256: base64url(sha256(verifier)). */
@@ -83,8 +85,12 @@ export function googleAuthorizationUrl(input: {
 
 /** Why a Google step failed. `reason` is a fixed code; nothing from Google's response body is kept. */
 export class GoogleAuthError extends Error {
-  constructor(readonly reason: string) {
-    super(`google: ${reason}`);
+  constructor(readonly reason: string, readonly scopeCheck?: {
+    exchange_scope_present: boolean;
+    exchange_send_granted: boolean;
+    tokeninfo_send_granted: boolean | null;
+  }) {
+    super(`google: ${reason}${scopeCheck ? ` ${JSON.stringify(scopeCheck)}` : ""}`);
     this.name = "GoogleAuthError";
   }
 }
@@ -95,6 +101,8 @@ export type GoogleTokens = {
   refreshToken: string | null;
   /** The scopes Google granted, space-separated. A person can untick one on Google's consent screen. */
   scope: string;
+  /** Whether the code exchange supplied string-valued scope metadata (including an empty string). */
+  scopePresent: boolean;
   expiresIn: number | null;
 };
 
@@ -127,8 +135,72 @@ export async function exchangeGoogleCode(input: {
     accessToken: typeof data.access_token === "string" ? data.access_token : null,
     refreshToken: typeof data.refresh_token === "string" ? data.refresh_token : null,
     scope: typeof data.scope === "string" ? data.scope : "",
+    scopePresent: typeof data.scope === "string",
     expiresIn: typeof data.expires_in === "number" ? data.expires_in : null,
   };
+}
+
+/**
+ * Ask Google which scopes this access token actually has. The POST/header contract follows
+ * google-auth-library's getTokenInfo; credentials never enter a URL. Missing exchange scope
+ * metadata is not permission, so only this bound, unexpired response can supply it instead.
+ */
+export async function googleAccessTokenScopes(input: {
+  accessToken: string | null;
+  clientId: string;
+  subject: string;
+  fetchImpl: FetchLike;
+  now: number;
+  /** May shorten the fixed deadline in tests; callers cannot extend it. */
+  timeoutMs?: number;
+}): Promise<string[]> {
+  if (!input.accessToken || input.accessToken.length > 16_384 || /[^\x21-\x7e]/.test(input.accessToken)) {
+    throw new GoogleAuthError("tokeninfo_no_access_token");
+  }
+  const controller = new AbortController();
+  const timeoutMs = Math.min(GOOGLE_TOKENINFO_TIMEOUT_MS, Math.max(1, input.timeoutMs ?? GOOGLE_TOKENINFO_TIMEOUT_MS));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new GoogleAuthError("tokeninfo_timeout"));
+      controller.abort();
+    }, timeoutMs);
+  });
+  const lookup = async (): Promise<string[]> => {
+    const res = await input.fetchImpl(GOOGLE_TOKENINFO_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded;charset=UTF-8", accept: "application/json", authorization: `Bearer ${input.accessToken}` },
+      redirect: "manual",
+      signal: controller.signal,
+    });
+    if (!res.ok || res.status !== 200) throw new GoogleAuthError("tokeninfo_http");
+    let data: unknown;
+    try { data = await res.json(); } catch { throw new GoogleAuthError("tokeninfo_malformed"); }
+    if (data === null || typeof data !== "object" || Array.isArray(data)) throw new GoogleAuthError("tokeninfo_malformed");
+    const info = data as Record<string, unknown>;
+    if (info.aud !== input.clientId || ["azp", "audience", "issued_to"].some((key) => info[key] !== undefined && info[key] !== input.clientId)) {
+      throw new GoogleAuthError("tokeninfo_aud");
+    }
+    // Google's subject fields are optional; any returned identity must agree with the verified ID token.
+    if (["sub", "user_id"].some((key) => info[key] !== undefined && info[key] !== input.subject)) throw new GoogleAuthError("tokeninfo_sub");
+    const integer = (value: unknown): number => typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
+    const expiresIn = integer(info.expires_in);
+    const exp = info.exp === undefined ? undefined : integer(info.exp);
+    if (!Number.isSafeInteger(expiresIn) || expiresIn <= 0 || (exp !== undefined && (!Number.isSafeInteger(exp) || exp <= input.now))) {
+      throw new GoogleAuthError("tokeninfo_expired");
+    }
+    if (typeof info.scope !== "string" || info.scope.length > 4_096 || /[^\x20-\x21\x23-\x5b\x5d-\x7e]/.test(info.scope)) {
+      throw new GoogleAuthError("tokeninfo_scope");
+    }
+    return [...new Set(info.scope.split(" ").filter(Boolean))];
+  };
+  try {
+    return await Promise.race([lookup(), deadline]);
+  } catch (error) {
+    throw error instanceof GoogleAuthError ? error : new GoogleAuthError("tokeninfo_unavailable");
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Google's signing keys, looked up by key id. */

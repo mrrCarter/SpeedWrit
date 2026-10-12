@@ -34,6 +34,8 @@ export type AppConfig = {
   secretPathFallback: boolean;
   /** The AI-review vendor key; review is skipped (and holds as unavailable) without it. */
   aiReviewKey: string | null;
+  aiReviewModel: string;
+  dial: { apiKey: string | null; fromNumber: string | null; ownerId: string | null; phone: string | null; live: boolean };
   /** One access-log line per request (secret paths redacted). */
   accessLog: boolean;
   /** The owner app's contact list (spec: contacts are owner-supplied), from OWNER_APP_CONTACTS as JSON. */
@@ -99,6 +101,18 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
   const logFlag = text("ACCESS_LOG") ?? "on";
   if (logFlag !== "on" && logFlag !== "off") problems.push({ name: "ACCESS_LOG", problem: 'must be "on" or "off"' });
 
+  const dialLive = text("DIAL_LIVE") ?? "0";
+  if (dialLive !== "0" && dialLive !== "1") problems.push({ name: "DIAL_LIVE", problem: 'must be "0" or "1"' });
+  const dial = { apiKey: text("DIAL_API_KEY"), fromNumber: text("DIAL_FROM_NUMBER"), ownerId: text("ALERT_OWNER_ID"), phone: text("OWNER_ALERT_PHONE"), live: dialLive === "1" };
+  if (dial.phone && !/^\+[1-9]\d{7,14}$/.test(dial.phone)) problems.push({ name: "OWNER_ALERT_PHONE", problem: "must be E.164" });
+  if (dial.ownerId && !/^own_[A-Za-z0-9_-]{1,96}$/.test(dial.ownerId)) problems.push({ name: "ALERT_OWNER_ID", problem: "must be an owner id" });
+  if (dial.fromNumber && (dial.fromNumber.length > 100 || /[\r\n\u0000]/.test(dial.fromNumber))) problems.push({ name: "DIAL_FROM_NUMBER", problem: "must be a bounded Dial source identifier" });
+  if (dial.live) for (const [name, value] of [["DIAL_API_KEY", dial.apiKey], ["DIAL_FROM_NUMBER", dial.fromNumber], ["ALERT_OWNER_ID", dial.ownerId], ["OWNER_ALERT_PHONE", dial.phone]]) {
+    if (!value) problems.push({ name: name!, problem: "is required when DIAL_LIVE=1" });
+  }
+  const aiReviewModel = text("AI_REVIEW_MODEL") ?? "jev-1.13.0";
+  if (!/^[A-Za-z0-9._-]{1,80}$/.test(aiReviewModel)) problems.push({ name: "AI_REVIEW_MODEL", problem: "must be a model identifier" });
+
   let contacts: AppConfig["contacts"] = [];
   const contactsText = text("OWNER_APP_CONTACTS");
   if (contactsText !== null) {
@@ -136,6 +150,8 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     redirectFallbacks,
     secretPathFallback: fallbackFlag === "on",
     aiReviewKey: text("TYPESAFE_API_KEY"),
+    aiReviewModel,
+    dial,
     accessLog: logFlag === "on",
     contacts,
     jobPurpose: text("JOB_PURPOSE") ?? "Send a recap of our call.",

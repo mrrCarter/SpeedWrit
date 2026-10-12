@@ -5,11 +5,13 @@ import { createHash, createHmac, generateKeyPairSync, sign } from "node:crypto";
 import {
   createGoogleJwks,
   exchangeGoogleCode,
+  googleAccessTokenScopes,
   GoogleAuthError,
   googleAuthorizationUrl,
   googleClientConfigFromEnv,
   GOOGLE_JWKS_URI,
   GOOGLE_TOKEN_ENDPOINT,
+  GOOGLE_TOKENINFO_ENDPOINT,
   pkceChallenge,
   verifyGoogleIdToken,
 } from "../../dist/owner/google.js";
@@ -134,7 +136,7 @@ test("the code exchange posts the verifier and the client, and keeps nothing of 
     return { ok: true, status: 200, json: async () => ({ id_token: "tok", access_token: "at", scope: "openid email", expires_in: 3599 }) };
   };
   const tokens = await exchangeGoogleCode({ code: "c1", codeVerifier: "v1", redirectUri: "https://x/cb", config: { clientId: CLIENT, clientSecret: "shh" }, fetchImpl: ok });
-  assert.deepEqual(tokens, { idToken: "tok", accessToken: "at", refreshToken: null, scope: "openid email", expiresIn: 3599 });
+  assert.deepEqual(tokens, { idToken: "tok", accessToken: "at", refreshToken: null, scope: "openid email", scopePresent: true, expiresIn: 3599 });
   assert.equal(posted.url, GOOGLE_TOKEN_ENDPOINT);
   assert.equal(posted.method, "POST");
   assert.deepEqual(Object.fromEntries(new URLSearchParams(posted.body)), {
@@ -149,6 +151,50 @@ test("the code exchange posts the verifier and the client, and keeps nothing of 
   await assert.rejects(exchangeGoogleCode({ code: "c", codeVerifier: "v", redirectUri: "r", config: { clientId: CLIENT, clientSecret: "s" }, fetchImpl: refused }), (error) => error.reason === "token_endpoint_http_400" && !error.message.includes("secret detail"));
   const noId = async () => ({ ok: true, status: 200, json: async () => ({ access_token: "at" }) });
   await rejects(exchangeGoogleCode({ code: "c", codeVerifier: "v", redirectUri: "r", config: { clientId: CLIENT, clientSecret: "s" }, fetchImpl: noId }), "no_id_token");
+});
+
+test("tokeninfo bounds the fetch and body deadline, never retries, and suppresses provider details", async () => {
+  const input = { accessToken: "private-access-canary", clientId: CLIENT, subject: CLAIMS.sub, now: NOW, timeoutMs: 20 };
+  for (const bodyHangs of [false, true]) {
+    let calls = 0;
+    let signal;
+    const fetchImpl = async (url, init) => {
+      calls++;
+      assert.equal(url, GOOGLE_TOKENINFO_ENDPOINT);
+      assert.equal(init.redirect, "manual");
+      assert.equal(init.body, undefined);
+      signal = init.signal;
+      return bodyHangs ? { ok: true, status: 200, json: () => new Promise(() => {}) } : new Promise(() => {});
+    };
+    const began = Date.now();
+    await assert.rejects(googleAccessTokenScopes({ ...input, fetchImpl }), (error) => error.reason === "tokeninfo_timeout" && !error.stack.includes("private-access-canary"));
+    assert.ok(Date.now() - began < 1_000);
+    assert.equal(calls, 1);
+    assert.equal(signal.aborted, true);
+  }
+  for (const fetchImpl of [
+    async () => { throw new Error("private-provider-canary"); },
+    async () => ({ ok: true, status: 200, json: async () => { throw new Error("private-provider-canary"); } }),
+  ]) {
+    await assert.rejects(googleAccessTokenScopes({ ...input, fetchImpl }), (error) => error instanceof GoogleAuthError && !error.stack.includes("private-provider-canary"));
+  }
+  let called = false;
+  await assert.rejects(googleAccessTokenScopes({ ...input, accessToken: null, fetchImpl: async () => { called = true; } }), (error) => error.reason === "tokeninfo_no_access_token");
+  assert.equal(called, false);
+});
+
+test("tokeninfo rejects malformed expiry/scope and contradictory client aliases", async () => {
+  const good = { aud: CLIENT, sub: CLAIMS.sub, user_id: CLAIMS.sub, azp: CLIENT, expires_in: "3599", exp: String(NOW + 3600), scope: "openid email" };
+  for (const delta of [
+    { audience: "wrong" }, { issued_to: "wrong" }, { sub: null },
+    { expires_in: undefined }, { expires_in: "1e3" }, { expires_in: " 60 " }, { expires_in: 1.2 }, { expires_in: Infinity },
+    { exp: NOW }, { exp: "bad" }, { scope: ["openid"] }, { scope: "openid\nemail" }, { scope: "x".repeat(4097) },
+  ]) {
+    const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ ...good, ...delta }) });
+    await assert.rejects(googleAccessTokenScopes({ accessToken: "access", clientId: CLIENT, subject: CLAIMS.sub, now: NOW, fetchImpl }), GoogleAuthError);
+  }
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => good });
+  assert.deepEqual(await googleAccessTokenScopes({ accessToken: "access", clientId: CLIENT, subject: CLAIMS.sub, now: NOW, fetchImpl }), ["openid", "email"]);
 });
 
 test("the client config comes from the environment and refuses to run without it", () => {

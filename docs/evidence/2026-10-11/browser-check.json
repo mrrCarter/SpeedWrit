@@ -1,0 +1,23 @@
+{
+  "kind": "Observer report, separate from signed receipt evidence",
+  "observed_at": "2026-10-11T23:03:51.011Z",
+  "runtime_source_sha": "910252e7a0d206fffbb9953deeb5320a8c200576",
+  "receipt_historical_source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce",
+  "receipt_id": "rcp_A_i3OZ22WSdaS0ij",
+  "public_key_id": "8d7fe1becc5eff89",
+  "served_app_sha256": "32df799f773da3daec510802302fe48c9b0cd056bfc0b4a46ed004085bf0a681",
+  "original_status": "Signature verified",
+  "one_byte_altered_status": "Signature invalid invalid_signature",
+  "changed_payload_ascii_bytes": 1,
+  "signature_unchanged": true,
+  "original_source_unchanged": true,
+  "public_get_request_count": 3,
+  "no_authenticated_requests": true,
+  "no_network_calls_during_checks": true,
+  "no_mocked_responses": true,
+  "screenshots": {
+    "browser-original.png": "9e02d99a06d9ebdc83c056f5142f278504d5eaf72c90f721e75a06d8fcd1bedb",
+    "browser-one-byte-edit.png": "f0f10bd2db42a7dd3639616c7c07718a72da9e387694fed376a24f3ae314e489"
+  },
+  "scope": "Public-browser recheck of an old receipt on new served verifier; not evidence of a new send or delivery. Host address and local audit paths omitted from this unsigned observation summary."
+}

@@ -43,6 +43,7 @@ export {
   type ParseContext,
 } from "./lib/frontDoor";
 export { FrontDoor, type CompleteDraft, type FrontDoorProps } from "./screens/FrontDoor";
+export { LiveJobForm, type LiveJobFormProps } from "./screens/LiveJobForm";
 export {
   CHATGPT_CALLBACK,
   CONSENT_FORM_ACTION,

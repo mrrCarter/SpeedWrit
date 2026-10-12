@@ -21,12 +21,14 @@ function stubFetch(respond) {
   return { calls, fetchImpl };
 }
 
-function answersWith(nouls, model = "jev-1.13") {
+const PINNED_MODEL = "jev-1.13.0";
+
+function answersWith(nouls, model = PINNED_MODEL) {
   const answers = Object.fromEntries(FLAGS.map((flag) => [flag, { type: "noul", noul: nouls[flag] ?? 0.01 }]));
   return new Response(JSON.stringify({ model, answers }), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
-const options = (fetchImpl, extra = {}) => ({ apiKey: "test-key", fetchImpl, ...extra });
+const options = (fetchImpl, extra = {}) => ({ apiKey: "test-key", model: PINNED_MODEL, fetchImpl, ...extra });
 
 test("a message under every threshold is clear, with probabilities as integer basis points", async () => {
   const { calls, fetchImpl } = stubFetch(() => answersWith({ commitment: 0.12345 }));
@@ -36,6 +38,7 @@ test("a message under every threshold is clear, with probabilities as integer ba
   assert.equal(review.probs_bp.commitment, 1235);
   for (const flag of FLAGS) assert.ok(Number.isInteger(review.probs_bp[flag]), flag);
   assert.equal(calls.length, 1);
+  assert.equal(review.model, PINNED_MODEL);
   assert.deepEqual(reviewReasons(review), []);
 });
 
@@ -44,6 +47,7 @@ test("a score at or above a question's threshold holds, and only that question f
   const review = await aiReview(INPUT, options(fetchImpl));
   assert.equal(review.outcome, "hold");
   assert.deepEqual(review.flags, ["commitment"]);
+  assert.equal(review.model, PINNED_MODEL);
   assert.deepEqual(reviewReasons(review), ["ai_review:commitment"]);
 });
 
@@ -60,8 +64,63 @@ test("the request carries only the purpose, other client names and the message, 
     message: { subject: INPUT.subject, body: INPUT.freeText },
   });
   assert.deepEqual(Object.keys(call.body.questions).sort(), [...FLAGS].sort());
-  assert.equal(call.body.model, "jev-1.13");
+  assert.equal(call.body.model, PINNED_MODEL);
 });
+
+test("the default model uses the canonical pinned version", async () => {
+  const saved = process.env.AI_REVIEW_MODEL;
+  delete process.env.AI_REVIEW_MODEL;
+  try {
+    const { calls, fetchImpl } = stubFetch(() => answersWith({}));
+    const review = await aiReview(INPUT, options(fetchImpl, { model: undefined }));
+    assert.equal(review.outcome, "clear");
+    assert.equal(review.model, PINNED_MODEL);
+    assert.equal(calls[0].body.model, PINNED_MODEL);
+  } finally {
+    if (saved !== undefined) process.env.AI_REVIEW_MODEL = saved;
+  }
+});
+
+for (const model of ["jev-latest", "jev-preview", "jev-1.13", "jev-1.12.0", "", " jev-1.13.0 "]) {
+  test(`noncanonical configured model ${JSON.stringify(model)} is unavailable without a request`, async () => {
+    const { calls, fetchImpl } = stubFetch(() => answersWith({}));
+    const review = await aiReview(INPUT, options(fetchImpl, { model }));
+    assert.deepEqual([review.outcome, review.error], ["unavailable", "unsupported_model"]);
+    assert.deepEqual(reviewReasons(review), ["ai_review_unavailable"]);
+    assert.equal(calls.length, 0);
+  });
+}
+
+test("the environment pin is checked and an explicit canonical option takes precedence", async () => {
+  const saved = process.env.AI_REVIEW_MODEL;
+  process.env.AI_REVIEW_MODEL = "jev-latest";
+  try {
+    const { calls, fetchImpl } = stubFetch(() => answersWith({}));
+    const unavailable = await aiReview(INPUT, options(fetchImpl, { model: undefined }));
+    assert.deepEqual([unavailable.outcome, unavailable.error], ["unavailable", "unsupported_model"]);
+    assert.equal(calls.length, 0);
+    const clear = await aiReview(INPUT, options(fetchImpl));
+    assert.equal(clear.outcome, "clear");
+    assert.equal(clear.model, PINNED_MODEL);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.model, PINNED_MODEL);
+  } finally {
+    if (saved === undefined) delete process.env.AI_REVIEW_MODEL;
+    else process.env.AI_REVIEW_MODEL = saved;
+  }
+});
+
+for (const model of [undefined, null, 113, "", " ", "jev-latest", "jev-1.13", "jev-1.12.0"]) {
+  test(`valid answers with reported model ${JSON.stringify(model)} remain unavailable`, async () => {
+    const answers = Object.fromEntries(FLAGS.map((flag) => [flag, { type: "noul", noul: 0.01 }]));
+    const { calls, fetchImpl } = stubFetch(() => new Response(JSON.stringify({ model, answers }), { status: 200 }));
+    const review = await aiReview(INPUT, options(fetchImpl));
+    assert.deepEqual([review.outcome, review.error], ["unavailable", "bad_shape"]);
+    assert.deepEqual(reviewReasons(review), ["ai_review_unavailable"]);
+    assert.equal(calls.length, 1);
+    assert.equal("model" in review, false);
+  });
+}
 
 test("an email address among the other clients is refused before any request", async () => {
   const { calls, fetchImpl } = stubFetch(() => answersWith({}));
@@ -95,10 +154,10 @@ for (const status of [401, 403, 422, 429, 500, 529]) {
 
 test("a missing, mistyped or out-of-range answer is unavailable, never a partial clear", async () => {
   const shapes = [
-    { model: "x", answers: {} },
-    { model: "x", answers: Object.fromEntries(FLAGS.map((f) => [f, { type: "choice", choice: "a" }])) },
-    { model: "x", answers: Object.fromEntries(FLAGS.map((f) => [f, { type: "noul", noul: "0.9" }])) },
-    { model: "x", answers: Object.fromEntries(FLAGS.map((f) => [f, { type: "noul", noul: 1.5 }])) },
+    { model: PINNED_MODEL, answers: {} },
+    { model: PINNED_MODEL, answers: Object.fromEntries(FLAGS.map((f) => [f, { type: "choice", choice: "a" }])) },
+    { model: PINNED_MODEL, answers: Object.fromEntries(FLAGS.map((f) => [f, { type: "noul", noul: "0.9" }])) },
+    { model: PINNED_MODEL, answers: Object.fromEntries(FLAGS.map((f) => [f, { type: "noul", noul: 1.5 }])) },
     null,
   ];
   for (const shape of shapes) {

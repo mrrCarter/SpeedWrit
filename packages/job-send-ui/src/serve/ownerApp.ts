@@ -1,4 +1,4 @@
-// Serves the built owner app (scripts/build-owner-app.mjs) from the app server: index.html, app.js and config.json
+// Serves the built owner app (scripts/build-owner-app.mjs) from the app server: index.html, app.js, app.css and config.json
 // under /owner-app/, and "/" redirects there. Plain node:http, no React; its own entry
 // ("@writ/job-send-ui/serve"). Only these fixed names are served, read once at start; no request path ever reaches
 // the file system, so there is nothing to traverse or list.
@@ -9,8 +9,8 @@ import type { OwnerAppConfig } from "../app/config";
 
 export type { OwnerAppConfig };
 
-/** The owner app's page policy: its own script and API, nothing else, never framed. */
-export const OWNER_APP_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+/** The owner app's page policy: its own script, stylesheet and API; never framed. */
+export const OWNER_APP_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 export const OWNER_APP_PATH = "/owner-app/";
 /** Written by build:app beside app.js: the receipt key compiled into the app. Read at start, never served. */
 export const RECEIPT_KEY_FILE = "receipt-key.json";
@@ -55,7 +55,7 @@ export function checkOwnerAppReceiptKey(dir: string, receiptKeyId: string): void
 
 /**
  * The handler: true when it answered (a path it owns), false for any other path. `dir` is the build output
- * (dist/owner-app); its two files are read now, so a missing build fails at start, not on the first visit. With
+ * (dist/owner-app); its assets are read now, so a missing build fails at start, not on the first visit. With
  * `receiptKeyId`, an app built for another receipt key fails at start too.
  */
 export function serveOwnerApp(options: { dir: string; config: OwnerAppConfig; receiptKeyId?: string }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
@@ -64,6 +64,7 @@ export function serveOwnerApp(options: { dir: string; config: OwnerAppConfig; re
   const files = {
     html: readFileSync(join(options.dir, "index.html")),
     js: readFileSync(join(options.dir, "app.js")),
+    css: readFileSync(join(options.dir, "app.css")),
     config: Buffer.from(JSON.stringify(options.config), "utf8"),
   };
 
@@ -89,6 +90,8 @@ export function serveOwnerApp(options: { dir: string; config: OwnerAppConfig; re
       send(req, res, 200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, files.html);
     } else if (path === `${OWNER_APP_PATH}app.js`) {
       send(req, res, 200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" }, files.js);
+    } else if (path === `${OWNER_APP_PATH}app.css`) {
+      send(req, res, 200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-cache" }, files.css);
     } else if (path === `${OWNER_APP_PATH}config.json`) {
       send(req, res, 200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }, files.config);
     } else {

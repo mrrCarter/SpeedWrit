@@ -5,6 +5,7 @@ import { formatExpiry } from "../lib/time";
 export interface JobDraft {
   jobId: string;
   policyVersion: number;
+  agentConnectionId: string;
   recipient: string;
   purpose: string;
   template: { id: string };
@@ -57,6 +58,8 @@ export function ConfirmJob({ job, authoritySha256, timeZone, onConfirm }: Confir
       <h2>Confirm this job</h2>
       <p>{job.purpose}</p>
       <dl>
+        <dt>Agent connection</dt>
+        <dd><code>{job.agentConnectionId}</code></dd>
         <dt>Recipient</dt>
         <dd>{job.recipient}</dd>
         <dt>Sends</dt>

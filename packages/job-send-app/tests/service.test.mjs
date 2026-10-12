@@ -22,6 +22,7 @@ function ownerAppDir(keyId) {
   const dir = mkdtempSync(join(tmpdir(), "owner-app-"));
   writeFileSync(join(dir, "index.html"), '<!doctype html><script type="module" src="/owner-app/app.js"></script>');
   writeFileSync(join(dir, "app.js"), "console.log('owner app');");
+  writeFileSync(join(dir, "app.css"), "body { color: white; }");
   writeFileSync(join(dir, "receipt-key.json"), JSON.stringify({ key_id: keyId, public_key_b64url: "unused-here" }));
   return dir;
 }
@@ -74,6 +75,11 @@ test("health, the OAuth metadata and the 401s answer", async () => {
   assert.equal(mcp.status, 401);
   assert.equal(mcp.headers.get("www-authenticate"), `Bearer resource_metadata="${HOST}/.well-known/oauth-protected-resource"`);
   assert.deepEqual(await (await fetch(`${base}/owner/me`)).json(), { error: "sign_in" });
+  for (const path of ["/owner/integrations", "/owner/alerts/preferences", "/owner/alerts/test"]) {
+    const response = await fetch(`${base}${path}`);
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: "sign_in" });
+  }
 });
 
 test("the owner app is served under its CSP, and / leads to it", async () => {
