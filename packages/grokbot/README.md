@@ -4,7 +4,7 @@ Grok connects to SpeedWrit the way ChatGPT does: over MCP, to the same `/mcp`, b
 
 Each Grok surface reaches SpeedWrit from xAI's servers, so the host must be public HTTPS. A laptop's `localhost` is not reachable from xAI.
 
-For OAuth setup, set `SPEEDWRIT_MCP_URL` to the full **Public MCP server URL** shown in the owner app's **Connections** page. This is the live app server's address; the public information pages can use a separate domain.
+For OAuth setup, set `SPEEDWRIT_MCP_URL` to the full **Public MCP server URL** shown in the owner app's **Connections** page.
 
 Jev supplies SpeedWrit's server-side AI review after job checks. It can add a hold for owner approval; it cannot approve a draft, send an email, or change job limits. In the owner app, Connections shows AI-review configuration and optional Dial phone alerts; Waiting for you holds drafts for exact-version approval. Configuration alone does not confirm that a review ran.
 
