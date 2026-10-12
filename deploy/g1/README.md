@@ -9,7 +9,7 @@ npm ci
 node --env-file=/absolute/private/writ-build.env deploy/g1/build.mjs
 ```
 
-Keep that env file outside the repository. It supplies `RECEIPT_SIGNING_KEY`, an Ed25519 PKCS#8 PEM. The helper derives the raw 32-byte public key as `RECEIPT_PUBLIC_KEY_B64URL` and its SHA-256 prefix as `RECEIPT_KEY_ID`; it prints only those public values. Optional existing values must match. The helper builds the UI, then the service, and checks their output files. Both child processes receive only OS/runtime variables and public receipt metadata. It neither installs dependencies nor starts or migrates the service.
+Keep that env file outside the repository. It supplies `RECEIPT_SIGNING_KEY`, an Ed25519 PKCS#8 PEM. The helper derives the raw 32-byte public key as `RECEIPT_PUBLIC_KEY_B64URL` and its SHA-256 prefix as `RECEIPT_KEY_ID`; it prints only those public values. Optional existing values must match. The helper builds the UI, then the service, and checks their output files, including the required owner-app `receipt-key.json`. Both manifest fields must match the derived public metadata; a missing, unreadable, malformed, or mismatched manifest fails the build with a fixed error code. Both child processes receive only OS/runtime variables and public receipt metadata. It neither installs dependencies nor starts or migrates the service.
 
 If npm is not beside the Node executable and `npm_execpath` is unset, pass its installed JavaScript entrypoint explicitly:
 

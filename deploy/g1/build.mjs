@@ -2,7 +2,7 @@
 // Build the owner UI and service with one receipt key. No install, migration, or server startup.
 import { createHash, createPrivateKey, createPublicKey } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -66,6 +66,30 @@ function isFile(path) {
   try { return statSync(path).isFile(); } catch { return false; }
 }
 
+/** A matching ID alone cannot establish that the browser has the intended verification key. */
+export function checkReceiptManifest({ manifestPath, metadata, readFile = readFileSync }) {
+  let contents;
+  try {
+    contents = readFile(manifestPath, 'utf8');
+  } catch {
+    throw new BuildError('ui_receipt_manifest_unreadable');
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(contents);
+  } catch {
+    throw new BuildError('ui_receipt_manifest_invalid');
+  }
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)
+      || typeof manifest.key_id !== 'string' || typeof manifest.public_key_b64url !== 'string') {
+    throw new BuildError('ui_receipt_manifest_invalid');
+  }
+  if (manifest.key_id !== metadata.RECEIPT_KEY_ID) throw new BuildError('ui_receipt_key_id_mismatch');
+  if (manifest.public_key_b64url !== metadata.RECEIPT_PUBLIC_KEY_B64URL) {
+    throw new BuildError('ui_receipt_public_key_mismatch');
+  }
+}
+
 /** Inject spawn/file checks for tests; the production launcher is always this Node, without a shell. */
 export function buildArtifacts({
   env = process.env,
@@ -74,6 +98,7 @@ export function buildArtifacts({
   execPath = process.execPath,
   spawn = spawnSync,
   fileExists = isFile,
+  readFile = readFileSync,
 } = {}) {
   const metadata = deriveReceiptMetadata(env);
   const selectedNpm = npmCli ?? env.npm_execpath ?? join(dirname(execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
@@ -103,10 +128,16 @@ export function buildArtifacts({
   for (const [artifact, error] of [
     ['packages/job-send-ui/dist/owner-app/index.html', 'ui_index_missing'],
     ['packages/job-send-ui/dist/owner-app/app.js', 'ui_script_missing'],
+    ['packages/job-send-ui/dist/owner-app/receipt-key.json', 'ui_receipt_manifest_missing'],
     ['packages/job-send-app/dist/main.mjs', 'app_entry_missing'],
   ]) {
     if (!fileExists(join(repoRoot, artifact))) throw new BuildError(error);
   }
+  checkReceiptManifest({
+    manifestPath: join(repoRoot, 'packages/job-send-ui/dist/owner-app/receipt-key.json'),
+    metadata,
+    readFile,
+  });
   return metadata;
 }
 
