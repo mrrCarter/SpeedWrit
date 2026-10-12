@@ -568,7 +568,13 @@ export function createExecutor(deps: ExecutorDeps) {
       const now=(await one<{now:Date}>(tx.client,"SELECT clock_timestamp() AS now"))!.now;
       const fields=receiptContext(locked);
       const channel={channel:"phone",call_id:proof.callId,voice_session:proof.sessionId,transcript_sha256:proof.transcriptSha256};
-      if (!pref?.enabled || pref.config_sha256!==proof.configSha256 || session.config_sha256!==proof.configSha256 || session.expires_at<=now) return {applied:false,status:"no_decision"};
+      const unavailableReason=!pref?.enabled ? "voice_disabled"
+        : pref.config_sha256!==proof.configSha256 || session.config_sha256!==proof.configSha256 ? "config_changed"
+        : session.expires_at<=now ? "expired" : null;
+      if(unavailableReason) {
+        const receipt_id=await writeReceipt(tx,"APPROVAL_REFUSED",{...fields,detail:{reason:unavailableReason,approver:owner,...channel}});
+        return {applied:false,status:"no_decision",receipt_id};
+      }
       await tx.client.query("SAVEPOINT voice_decision");
       try {
         if(v.version!==p.current_version)throw new Refusal("superseded");

@@ -22,7 +22,7 @@ export function createVoiceApprovals(options:Options){
  const {pool,dial,voice}=options;
  const configured=Boolean(voice.live&&voice.webhookSecret&&dial.live&&dial.apiKey&&dial.ownerId&&dial.phone&&dial.fromNumber);
  const binding=digest(JSON.stringify({owner:dial.ownerId,phone:dial.phone,source:dial.fromNumber,disclosure:VOICE_DISCLOSURE}));
- let timer:ReturnType<typeof setInterval>|undefined,running:Promise<void>|null=null,closed=false,started=false,generation=0;
+ let timer:ReturnType<typeof setInterval>|undefined,running:Promise<void>|null=null,closed=false,started=false,paused=true,generation=0;
  let controller:AbortController|null=null;
  let controls:Promise<unknown>=Promise.resolve();
  function control<T>(action:()=>Promise<T>):Promise<T>{const next=controls.then(action);controls=next.catch(()=>undefined);return next;}
@@ -30,15 +30,15 @@ export function createVoiceApprovals(options:Options){
  const maxSeq=async(c:PoolClient,owner:string)=>Number((await c.query("SELECT COALESCE(MAX(seq),0) AS seq FROM receipts WHERE owner_id=$1",[owner])).rows[0].seq);
  async function cancel(c:PoolClient,owner:string){await c.query("UPDATE owner_voice_sessions SET status='cancelled',finished_at=clock_timestamp() WHERE owner_id=$1 AND status IN ('queued','placing','awaiting_reply')",[owner]);}
  async function preference(owner:string){const eligible_owner=owner===dial.ownerId;const row=eligible_owner?(await pool.query("SELECT enabled,config_sha256 FROM owner_voice_preferences WHERE owner_id=$1",[owner])).rows[0]:null;
-  return {configured:eligible_owner&&configured,eligible_owner,enabled:eligible_owner&&configured&&row?.enabled===true&&row.config_sha256===binding,disclosure_version:VOICE_DISCLOSURE};}
- async function setEnabled(owner:string,enabled:boolean){if(owner!==dial.ownerId)throw new Refusal("not_found",404);if(enabled&&!configured)throw new Refusal("not_configured");generation++;
+  return {configured:eligible_owner&&configured,eligible_owner,enabled:eligible_owner&&configured&&!paused&&row?.enabled===true&&row.config_sha256===binding,disclosure_version:VOICE_DISCLOSURE};}
+ async function setEnabled(owner:string,enabled:boolean){if(owner!==dial.ownerId)throw new Refusal("not_found",404);if(enabled&&!configured)throw new Refusal("not_configured");const epoch=++generation;if(!enabled)paused=true;
   await control(()=>tx(async c=>{await c.query("INSERT INTO owner_voice_preferences(owner_id) VALUES($1) ON CONFLICT DO NOTHING",[owner]);await c.query("SELECT owner_id FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner]);await cancel(c,owner);
-   await c.query("UPDATE owner_voice_preferences SET enabled=$2,cursor_seq=$3,disclosure_version=$4,config_sha256=$5,updated_at=clock_timestamp() WHERE owner_id=$1",[owner,enabled,await maxSeq(c,owner),enabled?VOICE_DISCLOSURE:null,enabled?binding:null]);}));return preference(owner);}
- async function disableForStop(owner:string){if(owner!==dial.ownerId)return;generation++;await control(()=>tx(async c=>{await c.query("SELECT owner_id FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner]);await c.query("UPDATE owner_voice_preferences SET enabled=false,updated_at=clock_timestamp() WHERE owner_id=$1",[owner]);await cancel(c,owner);}));}
+   await c.query("UPDATE owner_voice_preferences SET enabled=$2,cursor_seq=$3,disclosure_version=$4,config_sha256=$5,updated_at=clock_timestamp() WHERE owner_id=$1",[owner,enabled,await maxSeq(c,owner),enabled?VOICE_DISCLOSURE:null,enabled?binding:null]);}));if(generation===epoch)paused=!enabled;return preference(owner);}
+ async function disableForStop(owner:string){if(owner!==dial.ownerId)return;paused=true;generation++;await control(()=>tx(async c=>{await c.query("SELECT owner_id FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner]);await c.query("UPDATE owner_voice_preferences SET enabled=false,updated_at=clock_timestamp() WHERE owner_id=$1",[owner]);await cancel(c,owner);}));}
  async function enqueue(c:PoolClient,owner:string,versionId:string,sha:string){await c.query(`INSERT INTO owner_voice_sessions(id,owner_id,proposal_version_id,version_sha256,config_sha256,expires_at)
   VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes') ON CONFLICT(proposal_version_id) DO NOTHING`,["voice_"+randomUUID(),owner,versionId,sha,binding]);}
  async function requestCall(owner:string,body:Record<string,unknown>){
-  if(owner!==dial.ownerId)throw new Refusal("not_found",404);
+  if(owner!==dial.ownerId)throw new Refusal("not_found",404);if(paused)throw new Refusal("voice_disabled");
   if(Object.keys(body).sort().join(",")!=="disclosure_version,proposal_id,shown_sha256,version"||body.disclosure_version!==VOICE_DISCLOSURE
    ||typeof body.proposal_id!=="string"||!/^prp_[A-Za-z0-9_-]{1,96}$/.test(body.proposal_id)||!Number.isInteger(body.version)
    ||typeof body.shown_sha256!=="string"||!/^[a-f0-9]{64}$/.test(body.shown_sha256))throw new Refusal("invalid",400);
@@ -48,7 +48,7 @@ export function createVoiceApprovals(options:Options){
    const s=(await c.query("SELECT id,status FROM owner_voice_sessions WHERE proposal_version_id=$1",[row.id])).rows[0];return {session_id:s.id,status:s.status};});
  }
  async function work(){
-  if(closed||!configured||!dial.ownerId)return;const owner=dial.ownerId,epoch=generation;
+  if(closed||paused||!configured||!dial.ownerId)return;const owner=dial.ownerId,epoch=generation;
   const selected=await tx(async c=>{
    const pref=(await c.query("SELECT * FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner])).rows[0];if(!pref?.enabled||pref.config_sha256!==binding){await cancel(c,owner);return null;}
    // An unpaged STOP query prevents a large receipt page from letting an old queued call through.
@@ -78,7 +78,7 @@ export function createVoiceApprovals(options:Options){
    await c.query("UPDATE owner_voice_preferences SET last_attempt_at=clock_timestamp() WHERE owner_id=$1",[owner]);
    return {id:s.id,instruction};
   });
-  if(!selected)return;if(closed||epoch!==generation){await pool.query("UPDATE owner_voice_sessions SET status='cancelled',finished_at=clock_timestamp() WHERE id=$1 AND status='placing'",[selected.id]);return;}
+  if(!selected)return;if(closed||paused||epoch!==generation){await pool.query("UPDATE owner_voice_sessions SET status='cancelled',finished_at=clock_timestamp() WHERE id=$1 AND status='placing'",[selected.id]);return;}
   controller=new AbortController();
   try{const call=await options.transport.place({attemptId:selected.id,to:dial.phone!,fromNumber:dial.fromNumber!,instruction:selected.instruction},controller.signal);
    if(call.direction!=="outbound"||call.to!==dial.phone||!/^\+[1-9]\d{7,14}$/.test(call.from)||(dial.fromNumber!.startsWith("+")&&call.from!==dial.fromNumber))throw Error("call_binding_mismatch");
@@ -89,6 +89,7 @@ export function createVoiceApprovals(options:Options){
  async function tick(){if(running)return running;running=work().catch(()=>undefined).finally(()=>{running=null;});return running;}
  async function start(){if(started||closed)return;started=true;const owner=dial.ownerId;if(owner)await tx(async c=>{const p=(await c.query("SELECT enabled,config_sha256 FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner])).rows[0];if(!p)return;
    await c.query("UPDATE owner_voice_preferences SET cursor_seq=$2,enabled=enabled AND COALESCE(config_sha256=$3,false) WHERE owner_id=$1",[owner,await maxSeq(c,owner),binding]);
+   paused=!(configured&&p.enabled&&p.config_sha256===binding);
    // No automatic replay after a restart, including an ambiguously placed phone call.
    await cancel(c,owner);
   });if(configured){timer=setInterval(()=>{void tick();},options.pollMs??2000);timer.unref();}}
@@ -131,5 +132,5 @@ export function createVoiceApprovals(options:Options){
    }else throw new Refusal("method_not_allowed",405);
   }catch(e){send(res,e instanceof Refusal?e.status:500,{error:e instanceof Refusal?e.code:"voice_error"});}return true;
  };
- return {configured,binding,handle,start,tick,disableForStop,async stop(){closed=true;generation++;if(timer)clearInterval(timer);controller?.abort();await running;await controls;}};
+ return {configured,binding,handle,start,tick,disableForStop,async stop(){closed=true;paused=true;generation++;if(timer)clearInterval(timer);controller?.abort();await running;await controls;}};
 }

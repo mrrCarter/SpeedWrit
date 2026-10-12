@@ -4,7 +4,8 @@ import {createHmac} from 'node:crypto';
 import {createServer} from 'node:http';
 import {createVoiceApprovals,createVoiceTransport,createOwnerAlerts,verifyDialEvent,voiceInstruction,voiceReadback,confirmedVoiceDecision,confirmation,VOICE_DISCLOSURE} from '../dist/service.mjs';
 import {startPostgres} from '../../job-send/tests/executor-support/pg.mjs';
-import {seedJob,makeExecutor,storeVersion,CUSTOM} from '../../job-send/tests/executor-support/fixtures.mjs';
+import {seedJob,makeExecutor,storeVersion,CUSTOM,PINNED} from '../../job-send/tests/executor-support/fixtures.mjs';
+import {verifyReceipt} from '@writ/job-send';
 
 const HOST='https://voice.example.test',SECRET='synthetic-webhook-'+ 'secret';
 const draft={recipient:'dana@example.test',subject:'A specific update',body:'The agreed review is complete.',version:1};
@@ -189,4 +190,21 @@ for(const action of ['Off','STOP'])test(`later ${action} cannot be overtaken by 
  // commits first, then the released older enable incorrectly restores authority.
  await Promise.race([off,new Promise(r=>setTimeout(r,25))]);barrier.release();await Promise.all([enabling,off]);
  assert.equal((await h.request('/owner/voice/preferences')).body.enabled,false);await h.held();await h.voice.tick();assert.equal(h.calls.length,0);
+});
+for(const action of ['Off','STOP'])test(`${action} blocks draft-content placement before its busy-pool write commits`,async t=>{
+ const h=await harness(t);await h.enable();await h.held();const barrier=h.pauseNextConnect();
+ const off=action==='Off'?h.request('/owner/voice/preferences',{enabled:false}):h.voice.disableForStop(h.seed.owner);
+ await barrier.blocked;
+ try {await h.voice.tick();assert.equal(h.calls.length,0);assert.equal(h.stub.callCount,0);}
+ finally {barrier.release();await off;}
+});
+for(const reason of ['voice_disabled','config_changed','expired'])test(`consumed ${reason} response has one verified refusal receipt`,async t=>{
+ const h=await harness(t),{s}=await h.prepare();
+ if(reason==='voice_disabled')await db.pool.query('UPDATE owner_voice_preferences SET enabled=false WHERE owner_id=$1',[h.seed.owner]);
+ if(reason==='config_changed')await db.pool.query('UPDATE owner_voice_preferences SET config_sha256=$2 WHERE owner_id=$1',[h.seed.owner,'f'.repeat(64)]);
+ if(reason==='expired')await db.pool.query("UPDATE owner_voice_sessions SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[s.id]);
+ await h.callback(s);await h.callback(s);assert.equal(h.stub.callCount,0);assert.ok((await h.session()).consumed_at);
+ const rows=(await db.pool.query("SELECT * FROM receipts WHERE owner_id=$1 AND type='APPROVAL_REFUSED'",[h.seed.owner])).rows;assert.equal(rows.length,1);
+ const r=rows[0],p=JSON.parse(r.payload);assert.equal(p.detail.reason,reason);assert.equal(p.detail.channel,'phone');assert.equal(p.detail.call_id,s.call_id);assert.equal(p.detail.voice_session,s.id);assert.match(p.detail.transcript_sha256,/^[a-f0-9]{64}$/);
+ assert.deepEqual(await verifyReceipt(r,PINNED),{ok:true,reason:'verified'});
 });
