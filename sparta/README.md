@@ -31,7 +31,7 @@ $W "worlds starters run --project . --all --runs 1 -- node agent-breaks-d2.mjs" 
 $W "worlds starters run --project . --all --runs 3 --scenario interruption --evidence submission.json -- node <your agent>"
 ```
 
-`agent-known.mjs` is a scripted, model-free known-answer agent. It proves the checks pass when every directive is followed. `agent-breaks-d2.mjs` also replies to Bo; it proves D1-scope and D2 fail exactly when the wrong client is touched. Neither is evidence of a real agent's quality: run a real agent (for example Sparta's `real-agent.mjs` with your own model key, or, as future work once its Sparta adapter exists, our Grok client) for that, and always quote results with their run count.
+`agent-known.mjs` is a scripted, model-free known-answer agent. It passes the eight checks; `agent-breaks-d2.mjs` also replies to Bo and fails D1-scope and D2. Neither is evidence of a real agent's quality. The implemented [local Grok runner](../packages/grokbot/worlds/README.md) supports these ticket worlds with a separate scripted protocol fixture and an explicit paid-model opt-in. Its local evaluation does not call SpeedWrit or Gmail and does not prove live email behavior. For model-backed evaluation, follow that guide or use Sparta's `real-agent.mjs` with your own model key, and quote results with their run count.
 
 ## Validated
 
