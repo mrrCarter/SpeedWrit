@@ -1,6 +1,8 @@
-# SpeedWrit (deployed at https://changed-brief-initiative-barrier.trycloudflare.com/owner-app/#/connect)
+# SpeedWrit
 
-Public information: [speedwrit.aidenid.com](https://speedwrit.aidenid.com) (About, Privacy, and Terms). Its Open SpeedWrit link takes you to the live owner app above. For ChatGPT or Grok, copy the **Public MCP server URL** shown in **Connections**.
+[Open SpeedWrit](https://speedwrit.aidenid.com/owner-app/#/connect) · [About](https://speedwrit.aidenid.com/about) · [Privacy](https://speedwrit.aidenid.com/privacy) · [Demo terms](https://speedwrit.aidenid.com/terms)
+
+For ChatGPT or Grok, copy the **Public MCP server URL** shown in the owner app’s **Connections** page.
 
 **Give people their time back: approve once, stop watching, get interrupted only by exception, inspect recorded decisions later.**
 
@@ -16,7 +18,7 @@ Built at SpeedHacks (SF Tech Week, Oct 11 2026) for the theme *remove a meaningf
 
 ## What a judge can verify right now
 
-Live acceptance run, ChatGPT connected over OAuth, real Gmail, Aman-owned test inboxes. The historical rows below ran on deployed build `480ee1f`. The runtime is now `910252e` (image `94144b1f`, same database, same receipt key `8d7fe1becc5eff89`); evidence stays attributed to the build it ran on, and anything still to come runs on `910252e`. The `rcp_…` IDs are signed receipts recorded by the live host; the job row and the browser-verify row are context, not receipts. A receipt's exported JSON can be checked at `/owner-app/#/verify`.
+Live acceptance run, ChatGPT connected over OAuth, real Gmail, Aman-owned test inboxes. The historical rows below ran on deployed build `480ee1f`. At this evidence snapshot, the runtime had advanced to `910252e` (image `94144b1f`, same database, same receipt key `8d7fe1becc5eff89`). Evidence stays attributed to the build it ran on. The `rcp_…` IDs are signed receipts recorded by the live host; the job row and the browser-verify row are context, not receipts. A receipt's exported JSON can be checked at `/owner-app/#/verify`.
 
 **Evidence bundle:** [`docs/evidence/2026-10-11`](docs/evidence/2026-10-11/) holds seven of these receipts as original signed files, with the pinned public key, the browser-check screenshots and a dependency-free checker. Running `node docs/evidence/2026-10-11/verify.mjs` verifies every signature and rejects a one-byte edit of each, with no network access.
 
