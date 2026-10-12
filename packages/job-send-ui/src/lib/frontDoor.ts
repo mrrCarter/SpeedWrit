@@ -211,7 +211,9 @@ export function parseLine(line: string, ctx: ParseContext): LineState {
     : { status: "needs_detail", kind: "approval", why: "Use a complete request to ask before custom wording, with no negation or extra conditions." });
 
   const builtin = BUILTIN.exec(text);
-  if (builtin) found.push({ status: "limit", limit: { kind: "builtin", what: (builtin[1] ?? "").toLowerCase() } });
+  if (builtin) found.push(wholePhrase(text, builtin)
+    ? { status: "limit", limit: { kind: "builtin", what: (builtin[1] ?? "").toLowerCase() } }
+    : { status: "needs_detail", kind: "content", why: "Use one complete prohibition per line. Exceptions and extra conditions are not supported." });
 
   const checks = CONTENT_CHECKS.filter(([, pattern]) => pattern.test(text)).map(([check]) => check);
   if (checks.length > 0) found.push({ status: "limit", limit: { kind: "ai_review", checks } });

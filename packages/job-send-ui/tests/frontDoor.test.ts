@@ -118,6 +118,14 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(attachments.status === "limit" && chipFor(attachments).detail).toBe("No attachments: already on for every job");
   });
 
+  it.each(["no links except for invoices", "do not say no links", "no attachments unless approved"])("does not discard a prohibition condition in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "content" });
+  });
+
+  it.each(["no more than 0.5 emails until tonight", "up to 1,000 messages until tonight", "only +3 messages until tonight", "up to 1/3 sends until 5pm", "until 5pm or until 4pm"])("does not salvage an expiry after an unsupported clause in %j", (text) => {
+    expect(parseLine(text, CTX)).not.toMatchObject({ status: "limit" });
+  });
+
   it("'don't sound rude' maps to an existing AI-review check: Ask me, labeled AI-reviewed, may miss", () => {
     const state = parseLine("don't sound rude", CTX);
     expect(limitOf(state)).toEqual({ kind: "ai_review", checks: ["hostile_tone"] });

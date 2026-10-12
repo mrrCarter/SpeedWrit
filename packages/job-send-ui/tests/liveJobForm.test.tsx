@@ -110,6 +110,15 @@ describe("LiveJobForm", () => {
     expect(onUse).not.toHaveBeenCalled();
   });
 
+  it.each(["no more than 0.5 emails until tonight", "up to 1,000 messages until tonight", "only +3 messages until tonight", "up to 1/3 sends until 5pm", "no links except for invoices"])("does not submit a partial interpretation of %j", (rule) => {
+    const { onUse, review } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: rule } });
+    expect(screen.getByText("Needs one detail")).toBeInTheDocument();
+    expect(review()).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+  });
+
   it("keeps typed expiry fixed and rechecks it when submitting later", () => {
     let clock = NOW();
     const { onUse, review } = setup(CONTACTS, () => clock);
