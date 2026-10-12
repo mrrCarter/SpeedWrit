@@ -1,4 +1,4 @@
-# SpeedWrit
+# SpeedWrit (deployed at https://changed-brief-initiative-barrier.trycloudflare.com/owner-app/#/connect)
 
 **Give people their time back: approve once, stop watching, get interrupted only by exception, inspect recorded decisions later.**
 
