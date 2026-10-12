@@ -89,15 +89,39 @@ describe("buildTimeline", () => {
     expect(row).toMatchObject({ label: SAY.prohibited, control: "none", tone: "denied", reason: "recipient_not_in_job" });
   });
 
+  it("explains only supported AI-review outcomes without changing receipt controls or reasons", () => {
+    const explanations = new Set<string>();
+    for (const outcome of ["clear", "hold", "unavailable"]) {
+      const receipt = r(1, "AI_REVIEW", { detail: { outcome, reason: "existing_reason" } });
+      const before = JSON.stringify(receipt);
+      const [row] = buildTimeline([receipt]);
+      expect(row).toMatchObject({ label: SAY.aiReview, tone: "info", control: "none", reason: "existing_reason" });
+      expect(row?.explanation).toEqual(expect.any(String));
+      expect(row?.explanation?.length).toBeGreaterThan(0);
+      expect(findNeverSay(row?.explanation ?? "")).toEqual([]);
+      explanations.add(row!.explanation!);
+      expect(JSON.stringify(receipt)).toBe(before);
+    }
+    expect(explanations.size).toBe(3);
+    for (const outcome of [undefined, null, false, 1, [], {}, "future", "CLEAR", "hold ", "toString"]) {
+      expect(buildTimeline([r(1, "AI_REVIEW", { detail: { outcome } })])[0]?.explanation).toBeUndefined();
+    }
+    expect(buildTimeline([r(1, "JOB_CONFIRMED", { detail: { outcome: "hold" } })])[0]?.explanation).toBeUndefined();
+  });
+
   it("UNKNOWN offers the two resolve buttons until the owner resolves THAT send", () => {
     const unknown = r(5, "OUTCOME_UNKNOWN", { proposal: "p1", version: 2, detail: { error_class: "timeout", dispatch: "d7" } });
     expect(buildTimeline([unknown])[0]).toMatchObject({ label: SAY.outcomeUnknown, control: "resolve", dispatchId: "d7", reason: "timeout" });
     const otherSend = r(6, "OUTCOME_RESOLVED", { proposal: "p2", version: 1, detail: { resolution: "sent" } });
     expect(buildTimeline([unknown, otherSend])[0]?.control).toBe("resolve"); // another send's resolution does not count
-    const resolved = r(7, "OUTCOME_RESOLVED", { proposal: "p1", version: 2, detail: { resolution: "not_sent" } });
+    const resolved = r(7, "OUTCOME_RESOLVED", { proposal: "p1", version: 2, detail: { resolution: "not_arrived" } });
     const rows = buildTimeline([unknown, resolved]);
     expect(rows[0]?.control).toBe("none");
-    expect(rows[1]?.label).toBe("You said it did not arrive");
+    expect(rows[1]?.label).toBe(SAY.resolvedNotArrived);
+    expect(SAY.resolvedNotArrived).toContain("still counts as a send");
+    // An older receipt says "not_sent" for the same observation.
+    const older = r(7, "OUTCOME_RESOLVED", { proposal: "p1", version: 2, detail: { resolution: "not_sent" } });
+    expect(buildTimeline([unknown, older])[1]?.label).toBe(SAY.resolvedNotArrived);
     const seen = r(8, "OUTCOME_RESOLVED", { proposal: "p1", version: 2, detail: { resolution: "sent" } });
     expect(buildTimeline([unknown, seen])[1]?.label).toBe("You saw it arrive");
     const noId = r(5, "OUTCOME_UNKNOWN", { proposal: "p1", version: 2, detail: { error_class: "timeout" } });

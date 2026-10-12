@@ -8,13 +8,16 @@
 // A 401 sends the browser to sign-in and back. Every outcome is said in the Say / Never-say table's words.
 import { useCallback, useEffect, useState } from "react";
 import { SAY } from "../lib/copy";
+import { OwnerShell } from "./OwnerShell";
 import type { Contact } from "../lib/frontDoor";
 import { ConfirmJob } from "../screens/ConfirmJob";
 import { Connect } from "../screens/Connect";
+import { IntegrationsCard } from "../screens/IntegrationsCard";
 import { AgentConnectionSetup } from "../screens/AgentConnectionSetup";
 import { ExceptionCard, type PendingVersion } from "../screens/ExceptionCard";
 import { FlightRecorder } from "../screens/FlightRecorder";
-import { FrontDoor, type CompleteDraft } from "../screens/FrontDoor";
+import type { CompleteDraft } from "../screens/FrontDoor";
+import { LiveJobForm } from "../screens/LiveJobForm";
 import { pinnedVerifier, VerifyPage, type Pinned } from "../screens/VerifyPage";
 import {
   jobDraftBody,
@@ -78,8 +81,12 @@ function useCall(signIn: (href: string) => void, route: string) {
 
 const sameSitePath = (href: string) => (href.startsWith("/") && !href.startsWith("//") ? href : null);
 
-function ConnectView({ api, connectGmailHref, call }: { api: OwnerApi; connectGmailHref: string; call: ReturnType<typeof useCall>["run"] }) {
+function ConnectView({ api, connectGmailHref, call, signIn }: { api: OwnerApi; connectGmailHref: string; call: ReturnType<typeof useCall>["run"]; signIn: OwnerAppProps["signIn"] }) {
   const [state, setState] = useState<ConnectState | null>(null);
+  const loadIntegrations = useCallback(() => api.integrations(), [api]);
+  const setAlertsEnabled = useCallback((enabled: boolean) => api.setAlertsEnabled(enabled), [api]);
+  const testAlert = useCallback(() => api.testAlert(), [api]);
+  const integrationSignIn = useCallback(() => signIn(signInHref("/owner-app/#/connect")), [signIn]);
   const refresh = useCallback(async () => {
     const next = await api.connectState();
     if (!next) throw new OwnerApiError(200, "unconfirmed_response");
@@ -98,12 +105,42 @@ function ConnectView({ api, connectGmailHref, call }: { api: OwnerApi; connectGm
         stopped={state.stopped || !state.connectionId}
         onStop={() => state.connectionId && void call(() => api.stop(state.connectionId!)).then(load)}
       />
+      <IntegrationsCard load={loadIntegrations} setEnabled={setAlertsEnabled} test={testAlert} onSignIn={integrationSignIn} />
       {/* Connect while none is linked; Reconnect when Google's grant lapsed (needs_reconnect), or the owner has no way back. */}
       {!connectGmail ? null : !state.gmail ? (
         <a href={connectGmail}>Connect Gmail</a>
       ) : state.gmail.status === "needs_reconnect" ? (
         <a href={connectGmail}>Reconnect Gmail</a>
       ) : null}
+      <details>
+        <summary>Setup guide: ChatGPT, Grokbot, and AI review</summary>
+        <ol>
+          <li><strong>Connect Gmail.</strong> Check the Gmail account above; use Connect Gmail if none is linked.</li>
+          <li>
+            <p><strong>Connect your agent.</strong> In ChatGPT app setup, choose OAuth with automatic client registration and use this public MCP address.</p>
+            <p>
+              <label>
+                Public MCP server URL<br />
+                <input type="url" value={new URL("/mcp", window.location.href).href} readOnly autoComplete="off" />
+              </label>
+            </p>
+            <p>
+              No manual client ID or client secret is needed. The terminal Grokbot client also supports OAuth: set <code>SPEEDWRIT_MCP_URL</code> to this address, then run <code>node packages/grokbot/dist/cli.js login</code> from the repository root after building Grokbot.
+              Your host operator must allow its callback at <code>http://127.0.0.1:8976/callback</code>. Private URL setup below is a fallback when OAuth cannot be used.
+              After connecting, refresh Connections, then reopen New job if it was already open.
+            </p>
+          </li>
+          <li>
+            <strong>Create a job.</strong> <a href="#/new">Set up and confirm a job</a>: choose the recipient and send limit, and whether to allow custom wording with your approval. Review tonight's expiry before confirming.
+            New jobs use your most recently connected active agent. Each job stays bound to that connection; an existing ChatGPT job does not transfer to Grokbot.
+          </li>
+          <li>
+            <strong>Review held drafts.</strong> Open <a href="#/exceptions">drafts waiting for your approval</a>, review the exact version shown, then approve or reject it.
+            Approval can send the draft if the job still permits it. STOP sending is available above.
+          </li>
+        </ol>
+        <p><strong>Where AI review fits:</strong> AI review runs on the server after the job checks; your host operator configures it. Jobs created here request review of custom wording. A flag or unavailable review sends the draft to Waiting for you for owner approval. AI review cannot approve a draft, send an email, grant permissions, or change the job's limits.</p>
+      </details>
       <AgentConnectionSetup
         api={api}
         connection={state.agentConnectionId ? { id: state.agentConnectionId, label: state.agentConnection?.label ?? "Agent" } : null}
@@ -120,20 +157,31 @@ function NewJobView(props: Pick<OwnerAppProps, "api" | "jobDefaults" | "contacts
   const [ids, setIds] = useState<ConnectState | null>(null);
   useEffect(() => void call(() => api.connectState()).then((state) => state && setIds(state)), [api, call]);
   if (!created) {
-    if (ids && (!ids.connectionId || !ids.agentConnectionId)) {
+    if (!ids) return <p role="status">Loading connections…</p>;
+    if (!ids.connectionId || !ids.agentConnectionId) {
       return <p>Connect Gmail and an agent first: a job binds to both.</p>;
     }
     return (
-      <FrontDoor
-        contacts={contacts}
-        timeZone={timeZone}
-        {...(now ? { now } : {})}
-        onUse={(draft: CompleteDraft) => {
-          if (!ids?.connectionId || !ids.agentConnectionId) return;
-          const body = jobDraftBody(draft, { connectionId: ids.connectionId, agentConnectionId: ids.agentConnectionId }, jobDefaults);
-          void call(() => api.createJob(body)).then((job) => job && setCreated(job));
-        }}
-      />
+      <>
+        <section aria-label="Agent for this job">
+          <h2>Agent for this job</h2>
+          <p>
+            {ids.agentConnection?.label ? <><bdi>{ids.agentConnection.label}</bdi> (declared) · </> : null}
+            <code>{ids.agentConnectionId}</code>
+          </p>
+          <p>This job stays bound to this connection. After connecting another agent, reopen New job to use it.</p>
+        </section>
+        <LiveJobForm
+          contacts={contacts}
+          timeZone={timeZone}
+          {...(now ? { now } : {})}
+          onUse={(draft: CompleteDraft) => {
+            if (!ids?.connectionId || !ids.agentConnectionId) return;
+            const body = jobDraftBody(draft, { connectionId: ids.connectionId, agentConnectionId: ids.agentConnectionId }, jobDefaults);
+            void call(() => api.createJob(body)).then((job) => job && setCreated(job));
+          }}
+        />
+      </>
     );
   }
   return (
@@ -239,7 +287,7 @@ export function OwnerApp(props: OwnerAppProps) {
   const jobMatch = /^\/jobs\/([^/]+)$/.exec(path);
   const jobId = jobMatch ? decodeSegment(jobMatch[1] ?? "") : null;
   let view;
-  if (path === "/connect") view = <ConnectView api={api} connectGmailHref={props.connectGmailHref} call={run} />;
+  if (path === "/connect") view = <ConnectView api={api} connectGmailHref={props.connectGmailHref} call={run} signIn={signIn} />;
   else if (path === "/new") view = <NewJobView {...props} call={run} />;
   else if (exceptionsMatch && focus !== null) view = <ExceptionsView api={api} call={run} focus={focus} />;
   else if (path === "/jobs") view = <JobsView api={api} call={run} />;
@@ -247,17 +295,13 @@ export function OwnerApp(props: OwnerAppProps) {
   else if (path === "/verify") view = <VerifyPage keyFingerprint={props.pinned.keyId} verify={pinnedVerifier(props.pinned)} initialReceipt={lastReceipts.length === 1 ? lastReceipts[0]?.text : ""} />;
   else view = <p>Not found.</p>;
   return (
-    <div>
-      <nav aria-label="Owner">
-        <a href="#/connect">Connections</a> · <a href="#/new">New job</a> · <a href="#/exceptions">Waiting for you</a> · <a href="#/jobs">Jobs</a> ·{" "}
-        <a href="#/verify">Verify</a>
-      </nav>
+    <OwnerShell path={path}>
       {problem ? (
         <p role="alert">
           {SAY.requestUnconfirmed} ({problem}) <a href="#/jobs">Open Jobs</a>.
         </p>
       ) : null}
-      <main>{view}</main>
-    </div>
+      {view}
+    </OwnerShell>
   );
 }

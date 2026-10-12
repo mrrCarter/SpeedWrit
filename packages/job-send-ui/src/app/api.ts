@@ -8,6 +8,7 @@ import type { ConnectProps } from "../screens/Connect";
 import type { PendingVersion } from "../screens/ExceptionCard";
 import type { CompleteDraft } from "../screens/FrontDoor";
 import type { TimelineReceipt } from "../lib/timeline";
+import { parseIntegrationMetadata, parseAlertPreference, parseAlertTest } from "../lib/integrations";
 
 export type Owner = { id: string; email: string };
 
@@ -65,6 +66,7 @@ export function jobDraftFromAuthority(job: Job): JobDraft {
   return {
     jobId: job.job_id,
     policyVersion: job.policy_version,
+    agentConnectionId: job.agent_connection,
     recipient: job.recipient,
     purpose: job.purpose,
     template: { id: job.template.id },
@@ -196,6 +198,20 @@ export class OwnerApi {
       throw new OwnerApiError(res.status, res.status === 401 ? "sign_in" : code);
     }
     return data as T;
+  }
+
+  private confirmed<T>(value: unknown, parse: (input: unknown) => T): T {
+    try { return parse(value); }
+    catch { throw new OwnerApiError(200, "unconfirmed_response"); }
+  }
+  async integrations() {
+    return this.confirmed(await this.call<unknown>("GET", "/owner/integrations"), parseIntegrationMetadata);
+  }
+  async setAlertsEnabled(enabled: boolean) {
+    return this.confirmed(await this.call<unknown>("POST", "/owner/alerts/preferences", { enabled }), parseAlertPreference);
+  }
+  async testAlert() {
+    return this.confirmed(await this.call<unknown>("POST", "/owner/alerts/test", {}), parseAlertTest);
   }
 
   me() {

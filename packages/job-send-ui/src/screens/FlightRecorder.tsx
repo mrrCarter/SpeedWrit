@@ -30,6 +30,7 @@ export function FlightRecorder({ jobId, receipts, receiptText, onResolve }: Flig
               <time dateTime={row.ts}>{row.ts}</time> {row.label}
               {row.reason ? <code> {row.reason}</code> : null}
             </button>
+            {row.explanation ? <p className="muted">{row.explanation}</p> : null}
             {row.badges.map((badge) => (
               <span key={badge} role="status">
                 {badge}

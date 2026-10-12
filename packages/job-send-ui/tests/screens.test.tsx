@@ -13,6 +13,7 @@ afterEach(cleanup);
 const JOB: JobDraft = {
   jobId: "job_1",
   policyVersion: 1,
+  agentConnectionId: "ac_1",
   recipient: "dana@test.example",
   purpose: "Send Dana at Acme a recap of Tuesday's call.",
   template: { id: "tpl_recap" },
@@ -68,6 +69,32 @@ describe("FlightRecorder", () => {
     render(<FlightRecorder jobId="job_1" receipts={noId} receiptText={() => "{}"} onResolve={vi.fn()} />);
     expect(screen.queryByRole("button", { name: SAY.resolveSeen })).toBeNull();
     expect(screen.getByText(SAY.outcomeUnknown)).toBeTruthy();
+  });
+
+  it("keeps AI-review explanations informational after approval and preserves the opened receipt", () => {
+    const review: TimelineReceipt = { id: "review", seq: 1, type: "AI_REVIEW", ts: "2026-10-11T19:00:00Z", proposal: "p1", version: 1, detail: { outcome: "hold", flags: ["hostile_tone"], probs_bp: { hostile_tone: 7500 }, model: "jev-1.13.0", ms: 7 } };
+    const history: TimelineReceipt[] = [
+      review,
+      { ...review, id: "approval", seq: 2, type: "APPROVAL_GRANTED", detail: {} },
+      { ...review, id: "accepted", seq: 3, type: "PROVIDER_ACCEPTED", detail: { provider_message_id: "message" } },
+    ];
+    const canonical = JSON.stringify({ key_id: "test", payload: JSON.stringify(review), signature: "test-only" });
+    const onResolve = vi.fn();
+    const { rerender } = render(<FlightRecorder jobId="job_1" receipts={[review]} receiptText={() => canonical} onResolve={onResolve} />);
+    const toggle = screen.getByRole("button", { name: /AI review/ });
+    const row = toggle.closest("li")!;
+    const explanation = row.querySelector("p")?.textContent;
+    expect(explanation?.length).toBeGreaterThan(0);
+    rerender(<FlightRecorder jobId="job_1" receipts={history} receiptText={() => canonical} onResolve={onResolve} />);
+    expect(row.querySelector("p")?.textContent).toBe(explanation);
+    expect(within(row).getAllByRole("button")).toEqual([toggle]);
+    expect(within(row).queryByRole("link")).toBeNull();
+    expect(within(row).queryByRole("status")).toBeNull();
+    expect(screen.getByText(SAY.providerAccepted)).toBeTruthy();
+    expect(findNeverSay(document.body.textContent ?? "")).toEqual([]);
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText("Receipt review").textContent).toBe(canonical);
+    expect(onResolve).not.toHaveBeenCalled();
   });
 
   it("each row opens its receipt", () => {
@@ -210,6 +237,7 @@ describe("ConfirmJob", () => {
   it("confirms exactly the authority hash it showed", () => {
     const onConfirm = vi.fn();
     render(<ConfirmJob job={JOB} authoritySha256="abc123def456789" timeZone="UTC" onConfirm={onConfirm} />);
+    expect(screen.getByText("ac_1")).toBeVisible();
     expect(screen.getByText("abc123def456")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Confirm job" }));
     expect(onConfirm).toHaveBeenCalledWith("job_1", "abc123def456789");

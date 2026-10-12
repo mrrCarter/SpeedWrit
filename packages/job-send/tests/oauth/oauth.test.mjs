@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   CHATGPT_REDIRECT,
+  GROK_REDIRECT,
+  GROK_BOT_REDIRECTS,
   assertOrigin,
   authorizationRedirect,
   checkAccessToken,
@@ -73,6 +75,60 @@ test("redirect URIs: ChatGPT's callbacks and configured fallbacks, by exact stri
   ]) {
     assert.equal(isAllowedRedirectUri(bad), false, bad);
   }
+});
+
+test("redirect URIs: Grok's grok.com connector callback, exactly, and no lookalike", () => {
+  assert.equal(GROK_REDIRECT, "https://grok.com/connectors-oauth-exchange-code/");
+  assert.equal(isAllowedRedirectUri(GROK_REDIRECT), true);
+  assert.equal(checkRegistration({ redirect_uris: [GROK_REDIRECT], client_name: "Grok" }).ok, true);
+  for (const bad of [
+    "https://grok.com/connectors-oauth-exchange-code",
+    "https://grok.com/connectors-oauth-exchange-code/x",
+    `${GROK_REDIRECT}?next=https://evil.test`,
+    `${GROK_REDIRECT}#x`,
+    "https://grok.com.evil.test/connectors-oauth-exchange-code/",
+    "https://evil.grok.com/connectors-oauth-exchange-code/",
+    "https://user@grok.com/connectors-oauth-exchange-code/",
+    "http://grok.com/connectors-oauth-exchange-code/",
+    "HTTPS://grok.com/connectors-oauth-exchange-code/",
+    "https://grok.com:8443/connectors-oauth-exchange-code/",
+    "https://grok.com/connectors/oauth/callback",
+  ]) {
+    assert.equal(isAllowedRedirectUri(bad), false, bad);
+  }
+});
+
+test("redirect URIs: Grok Bot's two callbacks, exactly, registered together as Grok Bot sends them", () => {
+  assert.deepEqual([...GROK_BOT_REDIRECTS], ["https://www.cursor.com/agents/mcp/oauth/callback", "http://localhost:8787/callback"]);
+  for (const uri of GROK_BOT_REDIRECTS) assert.equal(isAllowedRedirectUri(uri), true, uri);
+  // Grok Bot's registration as observed: both URIs at once.
+  const registered = checkRegistration({
+    client_name: "Cursor",
+    redirect_uris: [...GROK_BOT_REDIRECTS],
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    scope: "jobs.act",
+  });
+  assert.equal(registered.ok, true);
+  assert.equal(registered.client_name, "Cursor");
+  for (const bad of [
+    "https://cursor.com/agents/mcp/oauth/callback",
+    "http://www.cursor.com/agents/mcp/oauth/callback",
+    "https://www.cursor.com/agents/mcp/oauth/callback/",
+    "https://www.cursor.com/agents/mcp/oauth/callback?x=1",
+    "https://www.cursor.com.evil.test/agents/mcp/oauth/callback",
+    "https://www.cursor.com/bot/mcp/oauth/callback",
+    "http://localhost:8788/callback",
+    "http://localhost:8787/callback/x",
+    "https://localhost:8787/callback",
+    "http://127.0.0.1:8787/callback",
+    "http://evil.test:8787/callback",
+    "cursor://anysphere.cursor-mcp/oauth/callback",
+  ]) {
+    assert.equal(isAllowedRedirectUri(bad), false, bad);
+  }
+  assert.equal(checkRegistration({ redirect_uris: [...GROK_BOT_REDIRECTS, "cursor://anysphere.cursor-mcp/oauth/callback"] }).error, "invalid_redirect_uri");
 });
 
 test("registration: public clients, the code flow and allowed redirects only", () => {

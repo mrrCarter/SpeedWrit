@@ -21,6 +21,8 @@ import { GOOGLE_REVOKE_ENDPOINT } from "../executor/gmail-tokens.js";
 import { assertOrigin, generateOpaqueToken, hashToken } from "../oauth/oauth.js";
 import {
   exchangeGoogleCode,
+  googleAccessTokenScopes,
+  GoogleAuthError,
   googleAuthorizationUrl,
   pkceChallenge,
   verifyGoogleIdToken,
@@ -189,8 +191,19 @@ export function createGmailConnect(options: GmailConnectOptions) {
       options.onError?.(error);
       return fail("Google did not confirm this connection. Start again.");
     }
-    const scopes = tokens.scope.split(" ").filter((scope) => scope !== "");
+    let scopes = tokens.scope.split(" ").filter((scope) => scope !== "");
     if (!scopes.includes(GMAIL_SEND_SCOPE)) {
+      try {
+        scopes = await googleAccessTokenScopes({ accessToken: tokens.accessToken, clientId: google.clientId, subject: identity.sub, fetchImpl: options.fetchImpl, now: now() });
+      } catch (error) {
+        const reason = error instanceof GoogleAuthError ? error.reason : "tokeninfo_unavailable";
+        options.onError?.(new GoogleAuthError(reason, { exchange_scope_present: tokens.scopePresent, exchange_send_granted: false, tokeninfo_send_granted: null }));
+        await giveBack(tokens);
+        return fail("Google did not confirm Gmail sending permission. Connect again.");
+      }
+    }
+    if (!scopes.includes(GMAIL_SEND_SCOPE)) {
+      options.onError?.(new GoogleAuthError("gmail_send_not_granted", { exchange_scope_present: tokens.scopePresent, exchange_send_granted: false, tokeninfo_send_granted: false }));
       await giveBack(tokens);
       return fail("SpeedWrit was not allowed to send email. Connect again and allow sending email on your behalf.");
     }

@@ -413,11 +413,12 @@ test("DEMO_RECIPIENTS: any other recipient is NOT SENT right before the call", a
   assert.equal((await allowed.executor.dispatch_auto(next.versionId)).outcome.status, "accepted");
 });
 
-test("resolveUnknown: 'did not arrive' releases the reservation; 'I see it' keeps it", async () => {
+test("resolveUnknown records what the owner saw; either way the send still counts and the proposal stays unknown", async () => {
   for (const resolution of ["not_arrived", "seen"]) {
-    const seed = await seedJob(db.pool);
+    // One send allowed, so a released slot would show as a second send going out.
+    const seed = await seedJob(db.pool, { max_sends: 1 });
     const stranger = await seedJob(db.pool);
-    const { executor } = makeExecutor(db.pool, { script: ["unknown:http_502"] });
+    const { executor, stub } = makeExecutor(db.pool, { script: ["unknown:http_502"] });
     const v = await storeVersion(executor, db.pool, seed);
     await executor.dispatch_auto(v.versionId);
     const [d] = await dispatchesOf(db.pool, v.versionId);
@@ -428,17 +429,21 @@ test("resolveUnknown: 'did not arrive' releases the reservation; 'I see it' keep
     const after = (await dispatchesOf(db.pool, v.versionId))[0];
     assert.equal(after.witness, resolution);
     assert.equal(after.resolved_by, seed.owner);
-    assert.equal((await jobRow(db.pool, seed.job)).sends_reserved, resolution === "not_arrived" ? 0 : 1);
-    assert.equal((await proposalRow(v.proposalId)).status, resolution === "not_arrived" ? "not_sent" : "unknown");
+    // "It did not arrive" is an observation: the message may only be late or in spam.
+    assert.equal((await jobRow(db.pool, seed.job)).sends_reserved, 1, "the reservation stays used");
+    assert.equal((await proposalRow(v.proposalId)).status, "unknown", "the proposal stays unknown");
     const receipts = await assertReceiptChain(db.pool, seed.owner);
     assert.equal(receipts.at(-1).type, "OUTCOME_RESOLVED");
     assert.equal(receipts.at(-1).id, result.receipt_id);
     assert.deepEqual(receipts.at(-1).body.detail, {
       dispatch: d.id,
-      resolution: resolution === "seen" ? "sent" : "not_sent",
+      resolution: resolution === "seen" ? "sent" : "not_arrived",
       source: "owner",
       resolved_by: seed.owner,
     });
+    const again = await executor.dispatch_auto((await storeVersion(executor, db.pool, seed)).versionId);
+    assert.deepEqual([again.kind, again.reason], ["refused", "limit_reached"], "no second send takes the slot");
+    assert.equal(stub.callCount, 1);
   }
 });
 

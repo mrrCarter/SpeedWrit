@@ -39,6 +39,8 @@ import { renderConsentHtml } from "@writ/job-send-ui/consent-html";
 import { serveOwnerApp } from "@writ/job-send-ui/serve";
 
 import type { AppConfig } from "./config.js";
+import { createDialCaller, createOwnerAlerts } from "./dial-alerts.js";
+export { createDialCaller, createOwnerAlerts } from "./dial-alerts.js";
 
 export type Service = {
   server: Server;
@@ -70,6 +72,7 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
   if (ownPool) pool.on("error", onError);
   // Started partway through: a failure after it (an owner app built for another key) must stop it too.
   let stopSweeper: (() => void) | undefined;
+  let alerts: ReturnType<typeof createOwnerAlerts> | undefined;
   try {
     // A public key id, not a secret: compare it with build:app's "key <id>" line, or every receipt on the
     // owner app's verify page reads "Signature invalid".
@@ -92,12 +95,22 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
     stopSweeper = executor.startSweeper(undefined, onError);
 
     const ownerAuth = createOwnerAuth({ host: config.host, google, store: new PgOwnerStore(pool), fetchImpl, jwks, onError });
+    alerts = createOwnerAlerts({ pool, host: config.host, owners: ownerAuth, dial: config.dial,
+      jev: { configured: Boolean(config.aiReviewKey), model: config.aiReviewModel }, call: createDialCaller(config.dial, fetchImpl) });
+    await alerts.start();
     const gmail = createGmailConnect({ host: config.host, google, pool, executor, custody, owners: ownerAuth, fetchImpl, jwks, onError });
     const oauthStore = new PgOAuthStore(pool);
     const secretPaths = config.secretPathFallback ? new PgSecretPaths(pool) : undefined;
 
     const core = createOwnerCore({ pool, executor, mcpUrl: `${config.host}/mcp`, defaultTemplateId: template });
-    const ownerApi = createOwnerApi({ host: config.host, owners: ownerAuth, core, oauthStore, secretPaths, onError });
+    const notifications = alerts;
+    const ownerApi = createOwnerApi({ host: config.host, owners: ownerAuth, core: { ...core,
+      async engageStop(connectionId, ownerId) {
+        // Pause synchronously, but notification persistence can never prevent the email STOP.
+        void notifications.disableForStop(ownerId).catch(() => undefined);
+        return core.engageStop(connectionId, ownerId);
+      },
+    }, oauthStore, secretPaths, onError });
     const ownerApp = serveOwnerApp({
       dir: config.ownerAppDir,
       config: {
@@ -112,7 +125,7 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
     const backend = createMcpBackend({
       pool,
       executor,
-      review: (input) => aiReview(input, { apiKey: config.aiReviewKey ?? undefined }),
+      review: (input) => aiReview(input, { apiKey: config.aiReviewKey ?? "", model: config.aiReviewModel, fetchImpl }),
     });
     const agent = createJobSendHandler({
       host: config.host,
@@ -132,7 +145,7 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
     });
 
     const handler = createApp({
-      handlers: [ownerAuth.handle, gmail.handle, ownerApi, ownerApp],
+      handlers: [ownerAuth.handle, gmail.handle, alerts.handle, ownerApi, ownerApp],
       agent,
       log: config.accessLog ? log : undefined,
       onError,
@@ -143,12 +156,14 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
       receiptKeyId: keyId,
       async stop() {
         stopSweeper?.();
+        await alerts?.stop();
         await new Promise<void>((resolve) => server.close(() => resolve()));
         if (ownPool) await pool.end();
       },
     };
   } catch (error) {
     stopSweeper?.();
+    await alerts?.stop();
     if (ownPool) await pool.end().catch(() => undefined);
     throw error;
   }

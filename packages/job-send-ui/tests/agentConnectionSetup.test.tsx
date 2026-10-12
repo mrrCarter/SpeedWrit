@@ -10,6 +10,10 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
 const SECRET_URL = "https://speedwrit.example/mcp/c/synthetic_test_secret";
 const CREATED = { url: SECRET_URL, agent_connection_id: "agent_new", receipt_id: "receipt_created" };
 const REVOKED = { revoked: true, receipt_id: "receipt_revoked" };
+const INTEGRATIONS = {
+  jev: { configured: false, model: "jev-1.13.0" },
+  dial: { configured: false, live: false, enabled: false, status: "unconfigured", pending: 0, last_result: null },
+};
 const EMPTY: ConnectState = { gmail: null, agentConnection: null, stopped: false, connectionId: null, agentConnectionId: null };
 const EXISTING: ConnectState = {
   ...EMPTY,
@@ -30,6 +34,7 @@ function fixture(options: { create?: () => Promise<Reply> | Reply; revoke?: () =
   const api = new OwnerApi(async (path, init) => {
     requests.push({ path, init });
     if (path === "/owner/connect") return reply(connection);
+    if (path === "/owner/integrations") return reply(INTEGRATIONS);
     if (path === "/owner/jobs" && init?.method === "GET") return reply({ jobs: [] });
     if (path === "/owner/agent-connections/secret-path-new") {
       const result = await (options.create?.() ?? reply(CREATED));
@@ -63,7 +68,7 @@ function show(api: OwnerApi) {
 }
 async function submitLabel(label = "  Stage agent  ") {
   fireEvent.change(await screen.findByRole("textbox", { name: "Agent label" }), { target: { value: label } });
-  fireEvent.click(screen.getByRole("button", { name: "Create agent connection URL" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create private connection URL" }));
 }
 const secretField = () => screen.queryByRole("textbox", { name: "Agent connection URL" });
 
@@ -137,7 +142,7 @@ describe("owner agent connection setup", () => {
     show(f.api);
     const input = await screen.findByRole("textbox", { name: "Agent label" });
     expect(input).toHaveAttribute("maxlength", "100");
-    const create = screen.getByRole("button", { name: "Create agent connection URL" });
+    const create = screen.getByRole("button", { name: "Create private connection URL" });
     expect(create).toBeDisabled();
     expect(f.posts()).toEqual([]);
     fireEvent.change(input, { target: { value: "   " } });
@@ -169,7 +174,7 @@ describe("owner agent connection setup", () => {
     fireEvent.change(input, { target: { value: "Stage agent" } });
     act(() => { fireEvent.submit(input.closest("form")!); fireEvent.submit(input.closest("form")!); });
     expect(f.posts()).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Creating agent connection…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Creating private connection…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Revoke agent connection" })).toBeDisabled();
     await act(async () => creation.resolve(reply(CREATED)));
     expect(secretField()).toHaveValue(SECRET_URL);
@@ -246,7 +251,7 @@ describe("owner agent connection setup", () => {
     show(f.api);
     await submitLabel();
     await screen.findByText(SAY.agentConnectionUnavailable);
-    expect(screen.queryByRole("button", { name: "Create agent connection URL" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create private connection URL" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText(SAY.agentConnectionCreated)).toBeNull();
     expect(secretField()).toBeNull();
@@ -315,6 +320,7 @@ describe("owner agent connection setup", () => {
     const calls: Array<{ path: string; method?: string; body?: string }> = [];
     const api = new OwnerApi(async (path, init) => {
       calls.push({ path, method: init?.method, body: init?.body });
+      if (path === "/owner/integrations") return reply(INTEGRATIONS);
       if (path === "/owner/connect") {
         if (!createdOnServer) return reply(EMPTY);
         if (!revocationAttempted || snapshot === "same") return reply(current);
@@ -353,7 +359,7 @@ describe("owner agent connection setup", () => {
       expect(secretField()).toBeNull();
       expect(screen.queryByRole("button", { name: "Revoke agent connection" })).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
-      expect(screen.getByRole("button", { name: "Create agent connection URL" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Create private connection URL" })).toBeEnabled();
       if (snapshot === "none-then-stale") {
         const beforeStaleRefresh = calls.length;
         await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh Connections" })); });
@@ -374,7 +380,7 @@ describe("owner agent connection setup", () => {
       expect(screen.queryByText(SAY.agentConnectionNoneActive)).toBeNull();
       expect(screen.queryByText(SAY.agentConnectionStillActive)).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Hide URL" }));
-      expect(screen.getByRole("button", { name: "Create agent connection URL" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Create private connection URL" })).toBeDisabled();
       // An unresolved target must not silently become the different connection from the snapshot.
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Revoke agent connection" })); });
       const revokes = calls.filter(call => call.path.endsWith("/revoke"));
@@ -390,6 +396,7 @@ describe("owner agent connection setup", () => {
     const calls: Array<{ path: string; method?: string }> = [];
     const api = new OwnerApi(async (path, init) => {
       calls.push({ path, method: init?.method });
+      if (path === "/owner/integrations") return reply(INTEGRATIONS);
       if (path === "/owner/connect") return reply(created ? {
         ...EXISTING, agentConnectionId: CREATED.agent_connection_id,
         agentConnection: { ...EXISTING.agentConnection!, label: "Stage agent" },
@@ -430,6 +437,7 @@ describe("owner agent connection setup", () => {
     const calls: Array<{ path: string; method?: string }> = [];
     const api = new OwnerApi(async (path, init) => {
       calls.push({ path, method: init?.method });
+      if (path === "/owner/integrations") return reply(INTEGRATIONS);
       if (path === "/owner/connect") return reply(++reads === 1 ? EXISTING : malformed);
       if (path === "/owner/agent-connections/secret-path-new") throw new TypeError("Creation response lost");
       throw new Error(`Unexpected request: ${path}`);
@@ -451,12 +459,18 @@ describe("owner agent connection setup", () => {
 
   it("an unsuccessful manual refresh stays unconfirmed and never sends a POST", async () => {
     let reads = 0;
-    const fetch = vi.fn(async (_path: string, _init?: { method?: string }) => ++reads === 1 ? reply(EMPTY) : reply({ error: "server_error" }, 503));
+    const fetch = vi.fn(async (path: string, _init?: { method?: string }) => {
+      if (path === "/owner/integrations") return reply(INTEGRATIONS);
+      if (path === "/owner/connect") return ++reads === 1 ? reply(EMPTY) : reply({ error: "server_error" }, 503);
+      throw new Error(`Unexpected request: ${path}`);
+    });
     show(new OwnerApi(fetch));
     fireEvent.click(await screen.findByRole("button", { name: "Refresh Connections" }));
     expect((await screen.findByRole("alert")).textContent).toBe(SAY.agentConnectionUnconfirmed);
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["GET", "GET"]);
+    const connectionReads = fetch.mock.calls.filter(([path]) => path === "/owner/connect");
+    expect(connectionReads).toHaveLength(2);
+    expect(connectionReads.map(([, init]) => init?.method)).toEqual(["GET", "GET"]);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "POST")).toEqual([]);
     expect(screen.queryByText(SAY.agentConnectionCreated)).toBeNull();
     expect(screen.queryByText(SAY.agentConnectionRevoked)).toBeNull();
   });
