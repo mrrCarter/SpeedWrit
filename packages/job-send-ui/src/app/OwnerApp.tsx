@@ -12,6 +12,7 @@ import { OwnerShell } from "./OwnerShell";
 import type { Contact } from "../lib/frontDoor";
 import { ConfirmJob } from "../screens/ConfirmJob";
 import { Connect } from "../screens/Connect";
+import { IntegrationsCard } from "../screens/IntegrationsCard";
 import { AgentConnectionSetup } from "../screens/AgentConnectionSetup";
 import { ExceptionCard, type PendingVersion } from "../screens/ExceptionCard";
 import { FlightRecorder } from "../screens/FlightRecorder";
@@ -80,8 +81,12 @@ function useCall(signIn: (href: string) => void, route: string) {
 
 const sameSitePath = (href: string) => (href.startsWith("/") && !href.startsWith("//") ? href : null);
 
-function ConnectView({ api, connectGmailHref, call }: { api: OwnerApi; connectGmailHref: string; call: ReturnType<typeof useCall>["run"] }) {
+function ConnectView({ api, connectGmailHref, call, signIn }: { api: OwnerApi; connectGmailHref: string; call: ReturnType<typeof useCall>["run"]; signIn: OwnerAppProps["signIn"] }) {
   const [state, setState] = useState<ConnectState | null>(null);
+  const loadIntegrations = useCallback(() => api.integrations(), [api]);
+  const setAlertsEnabled = useCallback((enabled: boolean) => api.setAlertsEnabled(enabled), [api]);
+  const testAlert = useCallback(() => api.testAlert(), [api]);
+  const integrationSignIn = useCallback(() => signIn(signInHref("/owner-app/#/connect")), [signIn]);
   const refresh = useCallback(async () => {
     const next = await api.connectState();
     if (!next) throw new OwnerApiError(200, "unconfirmed_response");
@@ -100,6 +105,7 @@ function ConnectView({ api, connectGmailHref, call }: { api: OwnerApi; connectGm
         stopped={state.stopped || !state.connectionId}
         onStop={() => state.connectionId && void call(() => api.stop(state.connectionId!)).then(load)}
       />
+      <IntegrationsCard load={loadIntegrations} setEnabled={setAlertsEnabled} test={testAlert} onSignIn={integrationSignIn} />
       {/* Connect while none is linked; Reconnect when Google's grant lapsed (needs_reconnect), or the owner has no way back. */}
       {!connectGmail ? null : !state.gmail ? (
         <a href={connectGmail}>Connect Gmail</a>
@@ -270,7 +276,7 @@ export function OwnerApp(props: OwnerAppProps) {
   const jobMatch = /^\/jobs\/([^/]+)$/.exec(path);
   const jobId = jobMatch ? decodeSegment(jobMatch[1] ?? "") : null;
   let view;
-  if (path === "/connect") view = <ConnectView api={api} connectGmailHref={props.connectGmailHref} call={run} />;
+  if (path === "/connect") view = <ConnectView api={api} connectGmailHref={props.connectGmailHref} call={run} signIn={signIn} />;
   else if (path === "/new") view = <NewJobView {...props} call={run} />;
   else if (exceptionsMatch && focus !== null) view = <ExceptionsView api={api} call={run} focus={focus} />;
   else if (path === "/jobs") view = <JobsView api={api} call={run} />;
