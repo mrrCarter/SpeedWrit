@@ -36,6 +36,7 @@ export type AppConfig = {
   aiReviewKey: string | null;
   aiReviewModel: string;
   dial: { apiKey: string | null; fromNumber: string | null; ownerId: string | null; phone: string | null; live: boolean };
+  voice: { live: boolean; webhookSecret: string | null };
   /** One access-log line per request (secret paths redacted). */
   accessLog: boolean;
   /** The owner app's contact list (spec: contacts are owner-supplied), from OWNER_APP_CONTACTS as JSON. */
@@ -110,6 +111,11 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
   if (dial.live) for (const [name, value] of [["DIAL_API_KEY", dial.apiKey], ["DIAL_FROM_NUMBER", dial.fromNumber], ["ALERT_OWNER_ID", dial.ownerId], ["OWNER_ALERT_PHONE", dial.phone]]) {
     if (!value) problems.push({ name: name!, problem: "is required when DIAL_LIVE=1" });
   }
+  const voiceFlag=text("DIAL_VOICE_LIVE")??"0";
+  if(!["0","1"].includes(voiceFlag))problems.push({name:"DIAL_VOICE_LIVE",problem:'must be "0" or "1"'});
+  const voice={live:voiceFlag==="1",webhookSecret:text("DIAL_WEBHOOK_SECRET")};
+  if(voice.live&&!dial.live)problems.push({name:"DIAL_LIVE",problem:"must be 1 when DIAL_VOICE_LIVE=1"});
+  if(voice.live&&!voice.webhookSecret)problems.push({name:"DIAL_WEBHOOK_SECRET",problem:"is required when DIAL_VOICE_LIVE=1"});
   const aiReviewModel = text("AI_REVIEW_MODEL") ?? "jev-1.13.0";
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(aiReviewModel)) problems.push({ name: "AI_REVIEW_MODEL", problem: "must be a model identifier" });
 
@@ -152,6 +158,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     aiReviewKey: text("TYPESAFE_API_KEY"),
     aiReviewModel,
     dial,
+    voice,
     accessLog: logFlag === "on",
     contacts,
     jobPurpose: text("JOB_PURPOSE") ?? "Send a recap of our call.",

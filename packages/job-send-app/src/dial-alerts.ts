@@ -44,6 +44,9 @@ type Options = {
   pool: Pool; host: string; owners: Pick<OwnerSessions, "owner">;
   dial: AppConfig["dial"]; jev: { configured: boolean; model: string };
   call: DialCaller; pollMs?: number; now?: () => number;
+  /** Dedicated, explicitly opted-in voice decisions replace generic draft notices only. */
+  voiceConfigured?: boolean;
+  voiceBinding?: string;
 };
 class Refusal extends Error {
   constructor(readonly code: string, readonly status = 409) { super(code); }
@@ -71,6 +74,11 @@ export function createOwnerAlerts(options: Options) {
   const { pool, dial } = options;
   const now = options.now ?? Date.now;
   const configured = Boolean(dial.apiKey && dial.fromNumber && dial.ownerId && dial.phone);
+  const voiceBinding=options.voiceBinding;
+  const eligible = options.voiceConfigured && voiceBinding && /^[a-f0-9]{64}$/.test(voiceBinding)
+    ? `(${ELIGIBLE}) AND (r.type='OUTCOME_UNKNOWN' OR NOT EXISTS(SELECT 1 FROM owner_voice_preferences vp WHERE vp.owner_id=r.owner_id AND vp.enabled AND vp.config_sha256='${voiceBinding}')
+      OR EXISTS(SELECT 1 FROM owner_voice_sessions vs WHERE vs.proposal_version_id=v.id AND vs.status='failed' AND vs.token_sha256 IS NULL))`
+    : ELIGIBLE;
   let paused = true, generation = 0, closing = false;
   let timer: ReturnType<typeof setInterval> | undefined;
   let running: Promise<void> | null = null;
@@ -148,7 +156,7 @@ export function createOwnerAlerts(options: Options) {
     const attempt = await transaction(async (c): Promise<string | null> => {
       const pref = (await c.query("SELECT * FROM owner_alert_preferences WHERE owner_id=$1 FOR UPDATE", [owner])).rows[0];
       if (!pref || !pref.enabled || paused) { await cancel(c, owner); return null; }
-      const receipts = (await c.query(`SELECT r.seq,r.type,${ELIGIBLE} AS eligible
+      const receipts = (await c.query(`SELECT r.seq,r.type,${eligible} AS eligible
         FROM receipts r ${RECEIPT_JOINS}
         WHERE r.owner_id=$1 AND r.seq>$2 ORDER BY r.seq LIMIT 500`, [owner, pref.cursor_seq])).rows;
       if (receipts.some((r) => r.type === "STOP_ENGAGED")) {
@@ -166,7 +174,7 @@ export function createOwnerAlerts(options: Options) {
       await c.query(`UPDATE owner_alert_outbox o SET status='cancelled',finished_at=clock_timestamp()
         WHERE o.owner_id=$1 AND o.status='queued' AND o.receipt_seq IS NOT NULL
         AND NOT EXISTS(SELECT 1 FROM receipts r ${RECEIPT_JOINS}
-          WHERE r.owner_id=o.owner_id AND r.seq=o.receipt_seq AND ${ELIGIBLE})`, [owner]);
+          WHERE r.owner_id=o.owner_id AND r.seq=o.receipt_seq AND ${eligible})`, [owner]);
       // STOP state is checked again even when its receipt is beyond this bounded page.
       const { active, stopped } = (await c.query(`SELECT
         EXISTS(SELECT 1 FROM connections WHERE owner_id=$1 AND status='active' AND dispatch_enabled) AS active,
