@@ -168,8 +168,17 @@ export function createOwnerAlerts(options: Options) {
         AND NOT EXISTS(SELECT 1 FROM receipts r ${RECEIPT_JOINS}
           WHERE r.owner_id=o.owner_id AND r.seq=o.receipt_seq AND ${ELIGIBLE})`, [owner]);
       // STOP state is checked again even when its receipt is beyond this bounded page.
-      const active = (await c.query("SELECT EXISTS(SELECT 1 FROM connections WHERE owner_id=$1 AND status='active' AND dispatch_enabled) AS active", [owner])).rows[0].active;
-      if (!active) { await cancel(c, owner); return null; }
+      const { active, stopped } = (await c.query(`SELECT
+        EXISTS(SELECT 1 FROM connections WHERE owner_id=$1 AND status='active' AND dispatch_enabled) AS active,
+        EXISTS(SELECT 1 FROM receipts WHERE owner_id=$1 AND seq>$2 AND type='STOP_ENGAGED') AS stopped`, [owner,pref.cursor_seq])).rows[0];
+      if (stopped) {
+        paused = true; generation++;
+        await c.query("UPDATE owner_alert_preferences SET enabled=false WHERE owner_id=$1", [owner]);
+        await cancel(c, owner); return null;
+      }
+      // A fresh owner opt-in and explicit test are independent of Gmail connectivity.
+      // Automatic notices still need Gmail; STOP and Off above cancel both kinds.
+      if (!active) await c.query("UPDATE owner_alert_outbox SET status='cancelled',finished_at=clock_timestamp() WHERE owner_id=$1 AND status='queued' AND kind='attention'", [owner]);
       if (pref.last_attempt_at && now()-new Date(pref.last_attempt_at).getTime()<WINDOW_MS) return null;
       const ready = (await c.query("SELECT 1 FROM owner_alert_outbox WHERE owner_id=$1 AND status='queued' AND due_at<=$2 LIMIT 1", [owner,new Date(now())])).rowCount;
       if (!ready) return null;
