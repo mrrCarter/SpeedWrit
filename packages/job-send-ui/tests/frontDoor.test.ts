@@ -67,6 +67,16 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "count", maxSends: 3 });
   });
 
+  it.each(["3sends max", "max 3emails", "no more than 3messages!", "threeemails maximum"])("resolves the complete compact whole-count phrase %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "count", maxSends: 3 });
+  });
+
+  it.each([
+    "0.5emails", "-3messages", "1,000emails", "+3sends", "1/3messages", "0x03emails", "3%emails", "twentyemails", "emails3",
+  ].flatMap((count) => ["avoid rude tone", "no links", "until tonight"].map((rule) => `${count}, ${rule}`)))("keeps compact unsupported count intent unresolved in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
+  });
+
   it("'expires tonight' and 'until 6pm' are computed in the owner's time zone: Never after that", () => {
     expect(limitOf(parseLine("expires tonight", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T06:59:00.000Z" });
     expect(limitOf(parseLine("until 6pm", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T01:00:00.000Z" });

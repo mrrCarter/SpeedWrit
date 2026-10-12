@@ -32,6 +32,28 @@ function setup() {
 }
 
 describe("natural rules through the real owner API client", () => {
+  it("shows a compact whole count and submits that same count for server review", async () => {
+    const posts = setup();
+    fireEvent.change(await screen.findByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "3sends max" } });
+    expect(within(screen.getByRole("list", { name: "Resolved custom rules" })).getByText(/fourth send/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review this job" }));
+    await screen.findByRole("button", { name: "Confirm job" });
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({ path: "/owner/jobs", body: { max_sends: 3 } });
+    expect(screen.getByText("More than 2 sends")).toBeInTheDocument();
+  });
+
+  it.each(["0.5emails", "-3messages", "1,000emails"].flatMap((count) =>
+    ["avoid rude tone", "no links", "until tonight"].map((rule) => `${count}, ${rule}`),
+  ))("never submits the structured default after dropping compact count intent in %j", async (value) => {
+    const posts = setup();
+    fireEvent.change(await screen.findByRole("textbox", { name: "Custom rules in your words" }), { target: { value } });
+    expect(screen.getByRole("button", { name: "Review this job" })).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(screen.queryByRole("button", { name: "Confirm job" })).toBeNull();
+    expect(posts).toEqual([]);
+  });
+
   it("compiles typed rules to the draft POST, then confirms only the server-returned authority", async () => {
     const posts = setup();
     fireEvent.change(await screen.findByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "don't sound rude\nno links" } });
