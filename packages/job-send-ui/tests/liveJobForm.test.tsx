@@ -16,6 +16,75 @@ const setup = (contacts = CONTACTS, now = NOW, timeZone = "America/Los_Angeles")
 };
 
 describe("LiveJobForm", () => {
+  it("resolves typed content rules into review of every message, without granting authority", () => {
+    const { onUse, review } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "don't sound rude\nno promises of discounts" } });
+    expect(screen.getAllByText("AI-reviewed, may miss")).toHaveLength(2);
+    expect(screen.getByText(/All six built-in AI checks/)).toBeInTheDocument();
+    expect(onUse).not.toHaveBeenCalled();
+    fireEvent.click(review());
+    expect(onUse).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ maxSends: 3, allowCustomWithApproval: true, aiReview: "all_free_text" }));
+  });
+
+  it.each(["make it amazing", "only send max 3", "two sends max until tonight", "only email nobody"])('requires clarification of %j even with complete structured controls', (rule) => {
+    const { onUse, review } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: rule } });
+    expect(screen.getByText("Needs one detail")).toBeInTheDocument();
+    expect(review()).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /starter pack/i })).toBeNull();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "" } });
+    expect(review()).toBeEnabled();
+  });
+
+  it("matches the structured count and narrows expiry in the resolved draft", () => {
+    const { onUse, review } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "three sends max\nuntil 5pm\nonly email Dana" } });
+    expect(screen.getByText("More than 3 sends")).toBeInTheDocument();
+    fireEvent.click(review());
+    expect(onUse).toHaveBeenCalledWith(expect.objectContaining({ recipient: "dana@acme.test", maxSends: 3, expiresAt: "2026-10-12T00:00:00.000Z" }));
+  });
+
+  it("blocks a typed two-send limit against the structured three without changing either", () => {
+    const { onUse, review } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "two sends max" } });
+    expect(review()).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("The typed send limit disagrees");
+    expect(screen.getByRole("spinbutton", { name: "Sends at most" })).toHaveValue(3);
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Sends at most" }), { target: { value: "2" } });
+    fireEvent.click(review());
+    expect(onUse).toHaveBeenCalledWith(expect.objectContaining({ maxSends: 2 }));
+  });
+
+  it("blocks a conflicting recipient and does not let text enable unchecked custom permission", () => {
+    const { onUse, review } = setup();
+    const input = screen.getByRole("textbox", { name: "Custom rules in your words" });
+    fireEvent.change(input, { target: { value: "only email Bo" } });
+    expect(review()).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "ask me before custom wording" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ask me before custom wording" }));
+    expect(review()).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Custom wording is switched off");
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+  });
+
+  it("keeps typed expiry fixed and rechecks it when submitting later", () => {
+    let clock = NOW();
+    const { onUse, review } = setup(CONTACTS, () => clock);
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "until 10am" } });
+    expect(review()).toBeEnabled();
+    clock = new Date("2026-10-11T17:01:00.000Z");
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("The resolved expiry has passed");
+  });
+
   it("previews three sends and custom approval, then hands a complete draft to the existing review flow", () => {
     const { onUse, review } = setup();
     expect(screen.getByRole("spinbutton", { name: "Sends at most" })).toHaveValue(3);
