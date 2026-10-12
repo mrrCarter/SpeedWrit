@@ -58,6 +58,9 @@ bdi { overflow-wrap: anywhere; }
 .owner-context p { margin: 5px 0 0; }
 .owner-eyebrow { color: var(--gold); font-size: 11px; letter-spacing: .14em; }
 .owner-layout main { min-width: 0; outline: none; }
+.owner-footer { margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; }
+.owner-footer nav { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.owner-footer a { display: inline-block; padding: 8px 0; }
 .owner-layout main > section, .owner-layout main > details, .owner-layout main > p, .owner-layout main > form { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 24px; margin: 0 0 18px; overflow-wrap: anywhere; }
 .owner-layout article { border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin: 16px 0; background: #191611; }
 .owner-layout article h3 { margin-top: 0; }
