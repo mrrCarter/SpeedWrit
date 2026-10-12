@@ -1,7 +1,7 @@
 import { PUBLIC_PAGES, PUBLIC_PAGE_CSP } from '../../packages/job-send-ui/src/serve/publicPages';
 
 export const OWNED_ORIGIN = 'https://speedwrit.aidenid.com';
-export const UPSTREAM_ORIGIN = 'https://changed-brief-initiative-barrier.trycloudflare.com';
+export const UPSTREAM_ORIGIN = 'https://breakfast-lung-gorgeous-nuts.trycloudflare.com';
 const HEADERS = {
   'content-security-policy': PUBLIC_PAGE_CSP,
   'x-content-type-options': 'nosniff',
