@@ -14,6 +14,7 @@ const INTEGRATIONS = {
   jev: { configured: false, model: "jev-1.13.0" },
   dial: { configured: false, live: false, enabled: false, status: "unconfigured", pending: 0, last_result: null },
 };
+const VOICE_UNAVAILABLE = { configured: false, eligible_owner: false, enabled: false, disclosure_version: "voice-approval-v1" };
 const EMPTY: ConnectState = { gmail: null, agentConnection: null, stopped: false, connectionId: null, agentConnectionId: null };
 const EXISTING: ConnectState = {
   ...EMPTY,
@@ -35,6 +36,7 @@ function fixture(options: { create?: () => Promise<Reply> | Reply; revoke?: () =
     requests.push({ path, init });
     if (path === "/owner/connect") return reply(connection);
     if (path === "/owner/integrations") return reply(INTEGRATIONS);
+    if (path === "/owner/voice/preferences" && init?.method === "GET") return reply(VOICE_UNAVAILABLE);
     if (path === "/owner/jobs" && init?.method === "GET") return reply({ jobs: [] });
     if (path === "/owner/agent-connections/secret-path-new") {
       const result = await (options.create?.() ?? reply(CREATED));
@@ -321,6 +323,7 @@ describe("owner agent connection setup", () => {
     const api = new OwnerApi(async (path, init) => {
       calls.push({ path, method: init?.method, body: init?.body });
       if (path === "/owner/integrations") return reply(INTEGRATIONS);
+      if (path === "/owner/voice/preferences" && init?.method === "GET") return reply(VOICE_UNAVAILABLE);
       if (path === "/owner/connect") {
         if (!createdOnServer) return reply(EMPTY);
         if (!revocationAttempted || snapshot === "same") return reply(current);
@@ -397,6 +400,7 @@ describe("owner agent connection setup", () => {
     const api = new OwnerApi(async (path, init) => {
       calls.push({ path, method: init?.method });
       if (path === "/owner/integrations") return reply(INTEGRATIONS);
+      if (path === "/owner/voice/preferences" && init?.method === "GET") return reply(VOICE_UNAVAILABLE);
       if (path === "/owner/connect") return reply(created ? {
         ...EXISTING, agentConnectionId: CREATED.agent_connection_id,
         agentConnection: { ...EXISTING.agentConnection!, label: "Stage agent" },
@@ -438,6 +442,7 @@ describe("owner agent connection setup", () => {
     const api = new OwnerApi(async (path, init) => {
       calls.push({ path, method: init?.method });
       if (path === "/owner/integrations") return reply(INTEGRATIONS);
+      if (path === "/owner/voice/preferences" && init?.method === "GET") return reply(VOICE_UNAVAILABLE);
       if (path === "/owner/connect") return reply(++reads === 1 ? EXISTING : malformed);
       if (path === "/owner/agent-connections/secret-path-new") throw new TypeError("Creation response lost");
       throw new Error(`Unexpected request: ${path}`);
@@ -461,6 +466,7 @@ describe("owner agent connection setup", () => {
     let reads = 0;
     const fetch = vi.fn(async (path: string, _init?: { method?: string }) => {
       if (path === "/owner/integrations") return reply(INTEGRATIONS);
+      if (path === "/owner/voice/preferences" && _init?.method === "GET") return reply(VOICE_UNAVAILABLE);
       if (path === "/owner/connect") return ++reads === 1 ? reply(EMPTY) : reply({ error: "server_error" }, 503);
       throw new Error(`Unexpected request: ${path}`);
     });
