@@ -2,8 +2,10 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createOwnerAlerts, createDialCaller } from '../dist/service.mjs';
+import { FLAGS } from '@writ/job-send';
+import { createMcpBackend } from '@writ/job-send/server';
 import { startPostgres } from '../../job-send/tests/executor-support/pg.mjs';
-import { seedJob, makeExecutor, storeVersion, CUSTOM } from '../../job-send/tests/executor-support/fixtures.mjs';
+import { seedJob, makeExecutor, storeVersion, CUSTOM, FIELDS } from '../../job-send/tests/executor-support/fixtures.mjs';
 
 const HOST='https://alerts.example.test';
 let db;
@@ -12,7 +14,7 @@ after(async()=>{await db?.stop();});
 
 async function harness(t, overrides={}) {
   const seed=await seedJob(db.pool,{max_sends:10});
-  const {executor}=makeExecutor(db.pool);
+  const {executor,stub}=makeExecutor(db.pool);
   let time=Date.now(); const calls=[];
   const dial={apiKey:'test-private-dial-key',fromNumber:'test-private-source',ownerId:seed.owner,phone:'+14155550123',live:true,...overrides};
   const opts={pool:db.pool,host:HOST,owners:{owner:async(req)=>req.headers['x-test-owner']?{id:req.headers['x-test-owner'],email:'private@example.test'}:null},dial,jev:{configured:false,model:'jev-1.13.0'},pollMs:3600000,now:()=>time,call:async(id)=>{calls.push(id);return 'accepted';}};
@@ -25,8 +27,54 @@ async function harness(t, overrides={}) {
     return {status:r.status,body:await r.json()};
   };
   t.after(async()=>{await alerts.stop();await new Promise(resolve=>server.close(resolve));});
-  return {seed,executor,alerts,opts,calls,request,advance:(ms)=>{time+=ms;},held:()=>storeVersion(executor,db.pool,seed,{call:CUSTOM,reasons:['custom_content']})};
+  return {seed,executor,stub,alerts,opts,calls,request,advance:(ms)=>{time+=ms;},held:()=>storeVersion(executor,db.pool,seed,{call:CUSTOM,reasons:['custom_content']})};
 }
+
+// Use the actual gate/backend to commit held TEMPLATE versions: no custom_content shortcut.
+async function templateHold(h,reason) {
+  const clear={outcome:'clear',flags:[],probs_bp:Object.fromEntries(FLAGS.map(flag=>[flag,0])),model:'test-model',ms:1};
+  let review=reason==='ai_review_unavailable'?{outcome:'unavailable',error:'test_unavailable',ms:1}
+    :reason.startsWith('ai_review:')?{...clear,outcome:'hold',flags:[reason.slice('ai_review:'.length)],
+      probs_bp:{...clear.probs_bp,[reason.slice('ai_review:'.length)]:9100}}:clear;
+  await db.pool.query("UPDATE jobs SET ai_review='all_free_text' WHERE id=$1",[h.seed.job]);
+  if(reason==='mentions_other_client')await db.pool.query(
+    "INSERT INTO contacts(id,owner_id,email,name,client_label) VALUES($1,$2,'bo@test.example','Bo','Globex')",[`ct_${h.seed.owner}`,h.seed.owner]);
+  const conn={id:h.seed.agentConnection,owner_id:h.seed.owner,client_id:'client-1',client_label:'ChatGPT (declared)'};
+  const backend=createMcpBackend({pool:db.pool,executor:h.executor,review:async()=>review});
+  const fields={...FIELDS,...(reason==='mentions_other_client'?{recap:'Globex starts Monday too.'}:{})};
+  const {result}=await backend.proposeSend({job_id:h.seed.job,to:'dana@test.example',fields},conn);
+  assert.equal(result.status,'pending_approval');assert.deepEqual(result.review_reasons,[reason]);
+  return {backend,conn,result,clearReview:()=>{review=clear;}};
+}
+
+for(const reason of ['ai_review:hostile_tone','ai_review_unavailable','mentions_other_client']) {
+  test(`a template held only for ${reason} queues one owner alert`,async t=>{
+    const h=await harness(t);await h.request('/owner/alerts/preferences',{enabled:true});
+    await templateHold(h,reason);await h.alerts.tick();
+    assert.equal((await h.request('/owner/integrations')).body.dial.pending,1);
+    h.advance(9000);await h.alerts.tick();h.advance(70000);await h.alerts.tick();
+    assert.equal(h.calls.length,1);assert.equal(h.stub.callCount,0,'a notification never dispatches the held email');
+  });
+}
+for(const queued of [false,true]) {
+  test(`a superseded AI-only hold does not alert (${queued?'already queued':'not yet polled'})`,async t=>{
+    const h=await harness(t);await h.request('/owner/alerts/preferences',{enabled:true});
+    const hold=await templateHold(h,'ai_review:hostile_tone');
+    if(queued){await h.alerts.tick();assert.equal((await h.request('/owner/integrations')).body.dial.pending,1);}
+    hold.clearReview();const revised=await hold.backend.revise({proposal_id:hold.result.proposal_id,fields:{...FIELDS}},hold.conn);
+    assert.equal(revised.result.version,2);assert.deepEqual(revised.result.review_reasons,[]);
+    await h.alerts.tick();h.advance(9000);await h.alerts.tick();
+    assert.equal((await h.request('/owner/integrations')).body.dial.pending,0);assert.equal(h.calls.length,0);
+  });
+}
+test('approving an AI-only held version cancels its queued alert',async t=>{
+  const h=await harness(t);await h.request('/owner/alerts/preferences',{enabled:true});
+  const hold=await templateHold(h,'ai_review:hostile_tone');await h.alerts.tick();
+  assert.equal((await h.request('/owner/integrations')).body.dial.pending,1);
+  const status=await hold.backend.getStatus(hold.result.proposal_id,hold.conn);
+  await h.executor.approve(hold.result.proposal_id,status.version,status.version_sha256,h.seed.owner);
+  h.advance(9000);await h.alerts.tick();assert.equal(h.calls.length,0);assert.equal(h.stub.callCount,1);
+});
 
 test('metadata is authenticated, contains no credentials or numbers, and GET creates no preference',async t=>{
   const h=await harness(t);

@@ -13,7 +13,7 @@ const WINDOW_MS = 60_000;
 const DEBOUNCE_MS = 8_000;
 const ELIGIBLE = `((r.type IN ('PROPOSAL_CREATED','PROPOSAL_REVISED') AND p.status='pending'
   AND p.current_version=(r.payload::jsonb->>'version')::int AND v.state='pending'
-  AND 'custom_content'=ANY(v.review_reasons)) OR
+  AND cardinality(v.review_reasons)>0) OR
   (r.type='OUTCOME_UNKNOWN' AND d.status='unknown' AND d.witness IS NULL))`;
 const RECEIPT_JOINS = `LEFT JOIN proposals p ON p.id=r.payload::jsonb->>'proposal'
   LEFT JOIN proposal_versions v ON v.proposal_id=p.id AND v.version=p.current_version
