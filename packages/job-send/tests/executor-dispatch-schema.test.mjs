@@ -76,6 +76,8 @@ test("schema: the tables", async () => {
     "owner_alert_preferences",
     "owner_sessions",
     "owner_sign_ins",
+    "owner_voice_preferences",
+    "owner_voice_sessions",
     "owners",
     "proposal_versions",
     "proposals",
