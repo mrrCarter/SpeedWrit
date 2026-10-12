@@ -64,6 +64,19 @@ function reviewExplanation(outcome: unknown): string | undefined {
   }
 }
 
+function refusalExplanation(reason: string | undefined): string | undefined {
+  switch (reason) {
+    case "superseded":
+      return "This version was no longer current or available for that attempt. Check Waiting for you for versions still awaiting review.";
+    case "not_pending":
+      return "This version was no longer awaiting approval. Check this Flight Recorder for earlier decisions and send outcomes.";
+    case "dispatch_stopped":
+      return "Gmail was not enabled for sending at that attempt. Check Connections for its current status.";
+    default:
+      return undefined;
+  }
+}
+
 /**
  * The Flight Recorder rows for one job, in receipt order (the per-owner `seq`). The spec's rules:
  * - a denial reads "Prohibited by your job: not approvable", with its reason code and no control;
@@ -84,6 +97,10 @@ export function buildTimeline(receipts: readonly TimelineReceipt[]): TimelineRow
         break;
       case "ATTEMPT_DENIED":
         rows.push({ ...base, label: SAY.prohibited, tone: "denied", control: "none", reason });
+        break;
+      case "APPROVAL_REFUSED":
+      case "DISPATCH_REFUSED":
+        rows.push({ ...base, label: PLAIN_LABELS[receipt.type]!, tone: "info", control: "none", reason, explanation: refusalExplanation(reason) });
         break;
       case "PROPOSAL_CREATED":
       case "PROPOSAL_REVISED":
