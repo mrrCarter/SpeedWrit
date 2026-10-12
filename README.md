@@ -1,6 +1,6 @@
 # SpeedWrit (deployed at https://changed-brief-initiative-barrier.trycloudflare.com/owner-app/#/connect)
 
-or https://speedwrit.aidenid.com
+Public information: [speedwrit.aidenid.com](https://speedwrit.aidenid.com) (About, Privacy, and Terms). Its Open SpeedWrit link takes you to the live owner app above. For ChatGPT or Grok, copy the **Public MCP server URL** shown in **Connections**.
 
 **Give people their time back: approve once, stop watching, get interrupted only by exception, inspect recorded decisions later.**
 
