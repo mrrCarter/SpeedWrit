@@ -120,17 +120,18 @@ function ConnectView({ api, connectGmailHref, call, signIn }: { api: OwnerApi; c
             <p><strong>Connect your agent.</strong> In ChatGPT app setup, choose OAuth with automatic client registration and use this public MCP address.</p>
             <p>
               <label>
-                ChatGPT MCP server URL<br />
+                Public MCP server URL<br />
                 <input type="url" value={new URL("/mcp", window.location.href).href} readOnly autoComplete="off" />
               </label>
             </p>
             <p>
-              No manual client ID or client secret is needed. For the terminal Grokbot client, use Private URL setup below.
+              No manual client ID or client secret is needed. The terminal Grokbot client also supports OAuth: set <code>SPEEDWRIT_MCP_URL</code> to this address, then run <code>node packages/grokbot/dist/cli.js login</code> from the repository root after building Grokbot.
+              Your host operator must allow its callback at <code>http://127.0.0.1:8976/callback</code>. Private URL setup below is a fallback when OAuth cannot be used.
               After connecting, refresh Connections, then reopen New job if it was already open.
             </p>
           </li>
           <li>
-            <strong>Create a job.</strong> <a href="#/new">Set up and confirm a job</a> with the recipient, send limit, and expiry you want.
+            <strong>Create a job.</strong> <a href="#/new">Set up and confirm a job</a>: choose the recipient and send limit, and whether to allow custom wording with your approval. Review tonight's expiry before confirming.
             New jobs use your most recently connected active agent. Each job stays bound to that connection; an existing ChatGPT job does not transfer to Grokbot.
           </li>
           <li>
@@ -138,7 +139,7 @@ function ConnectView({ api, connectGmailHref, call, signIn }: { api: OwnerApi; c
             Approval can send the draft if the job still permits it. STOP sending is available above.
           </li>
         </ol>
-        <p><strong>Where AI review fits:</strong> Jobs request AI review for custom wording by default. Adding AI content rules also requests review of template text. A flag or unavailable review sends the draft to Waiting for you for owner approval. AI review cannot approve a draft, send an email, grant permissions, or change the job's limits.</p>
+        <p><strong>Where AI review fits:</strong> AI review runs on the server after the job checks; your host operator configures it. Jobs created here request review of custom wording. A flag or unavailable review sends the draft to Waiting for you for owner approval. AI review cannot approve a draft, send an email, grant permissions, or change the job's limits.</p>
       </details>
       <AgentConnectionSetup
         api={api}

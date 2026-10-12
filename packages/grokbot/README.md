@@ -4,6 +4,8 @@ Grok connects to SpeedWrit the way ChatGPT does: over MCP, to the same `/mcp`, b
 
 Each Grok surface reaches SpeedWrit from xAI's servers, so the host must be public HTTPS. A laptop's `localhost` is not reachable from xAI.
 
+Jev supplies SpeedWrit's server-side AI review after job checks. It can add a hold for owner approval; it cannot approve a draft, send an email, or change job limits. In the owner app, Connections shows AI-review configuration and optional Dial phone alerts; Waiting for you holds drafts for exact-version approval. Configuration alone does not confirm that a review ran.
+
 ## Which way to connect
 
 | Surface | How it authenticates | What the host needs |
@@ -20,15 +22,16 @@ Grok over xAI's Responses API with SpeedWrit as a remote MCP tool ([docs.x.ai, R
 
 ```sh
 npm ci && npm run -w packages/grokbot build
-export SPEEDWRIT_MCP_URL=https://HOST/mcp        # or the secret-path URL
+export SPEEDWRIT_MCP_URL=https://HOST/mcp        # OAuth; see the fallback setup below
 export XAI_API_KEY=...                           # console.x.ai; never commit it
 
 node packages/grokbot/dist/cli.js login          # bearer mode only: the owner presses Allow once
 node packages/grokbot/dist/cli.js doctor         # MCP initialize + tools/list, no Grok tokens spent
 node packages/grokbot/dist/cli.js ask "What jobs can you do for me right now?"
 node packages/grokbot/dist/cli.js demo           # the spec's six stage prompts, one conversation
-node packages/grokbot/dist/cli.js demo --from 2 --to 3 --json
 ```
+
+Run one Grokbot process at a time. The terminal client still has [open review follow-ups](../../README.md#agent-connection), including raw-output redaction and conversation state across turns. Keep terminal output and `--json` output private and review it before sharing.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -42,9 +45,9 @@ node packages/grokbot/dist/cli.js demo --from 2 --to 3 --json
 
 **OAuth mode.** `login` registers grokbot as a public client named "grokbot (xAI Grok)", opens the consent page, and catches the code on `http://127.0.0.1:8976/callback`. It checks `state` and RFC 9207 `iss`. Access tokens last one hour; grokbot refreshes five minutes early and saves the rotated pair before using it, because SpeedWrit revokes the whole grant when a rotated refresh token is shown twice.
 
-**Secret-path mode.** The owner creates a connection and its URL `HOST/mcp/c/<secret>` in one step: in the owner app, or with `POST /owner/agent-connections/secret-path-new` and `client_label: "grokbot"`. An existing connection gets one with `POST /owner/agent-connections/secret-path`. The host needs `SECRET_PATH_FALLBACK=on`. The URL is the credential: grokbot sends no `authorization` and redacts the secret in everything it prints.
+**Secret-path fallback.** In the owner app's Connections page, use Private URL setup to create a separate agent connection. The host needs `SECRET_PATH_FALLBACK=on`. Save the private URL as `SPEEDWRIT_MCP_URL` in the client's local configuration and skip `login`; this mode sends no `authorization` header. The URL is the credential: never paste it into chat. Confirm a new job for this connection before asking it to send.
 
-**One attempt per call.** grokbot never retries an xAI call, because a retry could repeat a send request. A failure is reported with its HTTP status, never the key.
+**One attempt per call.** grokbot never retries an xAI call, because a retry could repeat a send request. Treat failure output as private too.
 
 ## Grok on grok.com
 
@@ -66,13 +69,7 @@ Confirm with **Add it**, press **Authorize**, then **Allow** on SpeedWrit's cons
 
 What Grok Bot sends, observed on 2026-10-11 against the lab: it signs in as `client_name: "Cursor"` (user agent `Cursor/1.0.0`), registers `https://www.cursor.com/agents/mcp/oauth/callback` and `http://localhost:8787/callback` together, and authorizes with the first and `resource=HOST/mcp`. Both callbacks are built into SpeedWrit's allow-list, because registration needs every listed URI allowed. The consent screen names the client "Cursor".
 
-Without sign-in, give it a secret-path URL instead:
-
-```text
-Add a custom MCP server called speedwrit at https://HOST/mcp/c/<secret>
-```
-
-Then attach it to a task with `@speedwrit`. Check it under Settings, then Plugins, then Yours.
+After OAuth setup, attach it to a task with `@speedwrit`. Check it under Settings, then Plugins, then Yours. If OAuth is unavailable, use a client that accepts the private URL in local configuration, such as the terminal Grokbot fallback above; do not paste that URL into a chat.
 
 ## The lab: test every Grok surface before the real host exists
 
