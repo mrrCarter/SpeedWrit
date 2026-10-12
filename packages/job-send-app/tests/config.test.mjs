@@ -95,3 +95,19 @@ test("HOST must be exactly an https origin", () => {
   }
   assert.equal(loadConfig({ ...ENV, HOST: "https://127.0.0.1:18443" }).host, "https://127.0.0.1:18443");
 });
+
+test("Dial is private, disabled by default, and requires explicit complete live configuration", () => {
+  const defaults = loadConfig(ENV);
+  assert.deepEqual(defaults.dial, { apiKey: null, fromNumber: null, ownerId: null, phone: null, live: false });
+  assert.equal(defaults.aiReviewModel, "jev-1.13.0");
+  const fields = { DIAL_API_KEY: "test-private-key", DIAL_FROM_NUMBER: "test-source", ALERT_OWNER_ID: "own_test", OWNER_ALERT_PHONE: "+14155550123" };
+  assert.equal(loadConfig({ ...ENV, ...fields }).dial.live, false);
+  assert.equal(loadConfig({ ...ENV, ...fields, DIAL_LIVE: "1" }).dial.live, true);
+  assert.deepEqual(problemsOf({ ...ENV, DIAL_LIVE: "1" }).problems.map(p => p.name), Object.keys(fields));
+  assert.equal(problemsOf({ ...ENV, DIAL_LIVE: "true" }).problems[0].name, "DIAL_LIVE");
+  const bad = { ...ENV, ...fields, OWNER_ALERT_PHONE: "private-invalid-number", AI_REVIEW_MODEL: "private invalid model" };
+  const error = problemsOf(bad);
+  for (const value of Object.values(fields).concat(bad.OWNER_ALERT_PHONE, bad.AI_REVIEW_MODEL)) {
+    assert.equal(error.message.includes(value), false);
+  }
+});

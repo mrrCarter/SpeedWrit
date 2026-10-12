@@ -20,7 +20,10 @@ export function AgentPanel({ close }: { close: () => void }) {
   const pending = s.proposals.find((p) => p.kind === "send" && p.jobId === job?.id && p.status === "pending_approval");
   const log = s.agentLog.filter((e) => e.connectionId === agent?.id).slice(0, 30).reverse();
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [log.length]);
+  useEffect(() => {
+    // Braces matter: current Chrome returns a Promise from scrollIntoView, and React treats a returned value as cleanup.
+    end.current?.scrollIntoView({ block: "end" });
+  }, [log.length]);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -71,7 +74,7 @@ export function AgentPanel({ close }: { close: () => void }) {
             <button className="btn small" disabled={busy || !job} onClick={() => send("Do the Tuesday recap for Dana. Topic: onboarding call.", "dana@acme.test")}>Recap to Dana</button>
             <button className="btn small" disabled={busy || !job} onClick={() => send("Send the same recap to Bo at Birch too.", "bo@birch.test")}>Same recap to Bo</button>
             <button className="btn small" disabled={busy || !job} onClick={() => job && run(() => engine.proposeSend({ connectionId: agent.id, jobId: job.id, to: "dana@acme.test", custom: { subject: "Kickoff?", body: NOTE }, prompt: "Dana needs a short custom note asking if Thursday at 2pm works for a kickoff." }))}>Custom note: Thu 2pm</button>
-            <button className="btn small" disabled={busy || !pending} onClick={() => pending && run(() => engine.reviseSend(pending.id, { custom: { subject: "Kickoff?", body: NOTE.replace("Thursday at 2pm", "Friday at 10am") }, prompt: "Make it Friday at 10am instead." }))}>Make it Fri 10am</button>
+            <button className="btn small" disabled={busy || !pending} onClick={() => pending && run(() => engine.reviseSend(pending.id, { connectionId: agent.id, custom: { subject: "Kickoff?", body: NOTE.replace("Thursday at 2pm", "Friday at 10am") }, prompt: "Make it Friday at 10am instead." }))}>Make it Fri 10am</button>
             <button className="btn small" disabled={busy || !job} onClick={() => send("Send Dana one more reminder.", "dana@acme.test")}>One more reminder</button>
             <select className="btn small" value="" disabled={busy || !job} onChange={(e) => MORE[e.target.value]?.()}>
               <option value="">More tests…</option>

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { tamperOneByte, verifyReceipt, type Signer, type Verification } from "../domain/crypto";
 import type { Receipt } from "../domain/types";
 import { useEngine, useEngineState } from "../engineContext";
+import { verifyStore } from "../explain";
 import { Card, Chip, short } from "./ui";
 
 export function Verify() {
@@ -12,6 +13,7 @@ export function Verify() {
   const [tampered, setTampered] = useState(false);
   const [check, setCheck] = useState<Verification | null>(null);
   const [all, setAll] = useState<{ ok: number; bad: number } | null>(null);
+  const lifetime = useRef(0);
 
   useEffect(() => {
     void engine.signer.then(setSigner);
@@ -23,18 +25,32 @@ export function Verify() {
 
   useEffect(() => {
     setCheck(null);
-  }, [seq, tampered, s.rev]);
+    // Ignore checks that finish after their input, receipt list, or mounted view changes.
+    return () => { lifetime.current++; };
+  }, [engine, seq, tampered, s.rev]);
+
+  useEffect(() => {
+    setAll(null);
+  }, [engine, s.rev]);
 
   const verify = async () => {
     if (!signer || !subject) return;
-    setCheck(await verifyReceipt(subject, signer, list[subject.seq - 2]));
+    const generation = engine.generation;
+    const view = lifetime.current;
+    const v = await verifyReceipt(subject, signer, list[subject.seq - 2]);
+    if (generation !== engine.generation || view !== lifetime.current) return;
+    setCheck(v);
+    if (!tampered && v.hashOk && v.signatureOk) verifyStore.mark(generation);
   };
   const verifyAll = async () => {
     if (!signer) return;
+    const generation = engine.generation;
+    const view = lifetime.current;
     let ok = 0;
     let bad = 0;
     for (const [i, r] of list.entries()) {
       const v = await verifyReceipt(r, signer, list[i - 1]);
+      if (generation !== engine.generation || view !== lifetime.current) return;
       if (v.hashOk && v.signatureOk && v.chainOk && v.keyOk) ok += 1;
       else bad += 1;
     }

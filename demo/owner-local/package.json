@@ -8,9 +8,11 @@
     "dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dial": "node --env-file-if-exists=.env.local server/dial-relay.mjs"
   },
   "dependencies": {
+    "@getdial/sdk": "0.41.1",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },

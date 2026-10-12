@@ -31,6 +31,7 @@ after(async () => {
 const HOST = "https://jobs.example.com";
 const CLIENT = "client-123.apps.googleusercontent.com";
 const GOOGLE = { clientId: CLIENT, clientSecret: "shh" };
+const TOKENINFO = "https://oauth2.googleapis.com/tokeninfo";
 const custody = createTokenCustody(randomBytes(32));
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const JWK = { ...publicKey.export({ format: "jwk" }), kid: "k1" };
@@ -58,8 +59,16 @@ function fakeGoogle() {
   const google = { calls: [], revoked: [], answer: {}, refreshFails: false, refreshHangs: false, refreshBodyHangs: false, revokeHangs: false, nonces: new Map() };
   google.fetchImpl = async (url, init) => {
     const form = new URLSearchParams(init?.body ?? "");
-    google.calls.push({ url, form: Object.fromEntries(form), signal: init?.signal });
+    google.calls.push({ url, form: Object.fromEntries(form), signal: init?.signal, headers: init?.headers, method: init?.method, redirect: init?.redirect });
     const json = (status, value) => ({ ok: status < 300, status, json: async () => value });
+    if (url === TOKENINFO) {
+      if (google.infoError) throw new Error("private-token-provider-detail");
+      const email = google.answer.email ?? "dana.owner@gmail.com";
+      return json(google.infoStatus ?? 200, google.info ?? {
+        aud: CLIENT, sub: `sub-${email}`, expires_in: "3599",
+        scope: google.answer.scope ?? `openid email ${GMAIL_SEND_SCOPE}`,
+      });
+    }
     if (url === GOOGLE_REVOKE_ENDPOINT) {
       if (google.revokeHangs) return new Promise(() => {});
       google.revoked.push(form.get("token"));
@@ -79,7 +88,7 @@ function fakeGoogle() {
       id_token: idToken({ sub: `sub-${email}`, email, nonce: nonce ?? google.nonces.get(code) }),
       access_token: `at-code-${code}`,
       ...(refresh ? { refresh_token: refresh } : {}),
-      scope,
+      ...(google.answer.omitScope ? {} : { scope }),
       expires_in: 3600,
     });
   };
@@ -154,6 +163,7 @@ test("connect: openid email + gmail.send, offline, with consent; the sealed refr
     assert.match(done.headers.get("set-cookie"), /__Host-writ_gmail=;.*Max-Age=0/);
     const exchange = app.google.calls.find((c) => c.form.grant_type === "authorization_code");
     assert.equal(exchange.form.code_verifier.length > 40, true, "PKCE verifier sent");
+    assert.equal(app.google.calls.some((call) => call.url === TOKENINFO), false, "an explicit Gmail grant needs no lookup");
 
     const [row] = await gmailRows(app.seed.owner);
     assert.equal(row.account_email, "dana.owner@gmail.com", "the address comes from the verified ID token");
@@ -204,6 +214,85 @@ test("connect refuses: no session, another browser, another owner, gmail.send le
   } finally {
     await app.close();
   }
+});
+
+test("connect recovers omitted exchange scopes from bound provisioned scopes, including after STOP", async () => {
+  const app = await start();
+  try {
+    app.google.answer = { omitScope: true };
+    app.google.info = { aud: CLIENT, sub: "sub-dana.owner@gmail.com", expires_in: "3599", scope: `https://www.googleapis.com/auth/userinfo.email openid ${GMAIL_SEND_SCOPE}` };
+    const done = await app.finish(await app.begin(), { code: "c-provisioned" });
+    assert.equal(done.status, 302);
+    const [row] = await gmailRows(app.seed.owner);
+    assert.deepEqual(row.granted_scopes, app.google.info.scope.split(" "));
+    assert.equal(custody.open(row.id, row.refresh_token_enc), "rt-c-provisioned");
+    const [lookup] = app.google.calls.filter((call) => call.url === TOKENINFO);
+    assert.equal(lookup.method, "POST");
+    assert.equal(lookup.redirect, "manual");
+    assert.equal(lookup.headers.authorization, "Bearer at-code-c-provisioned");
+    assert.deepEqual(lookup.form, {}, "no token in URL or body");
+    assert.deepEqual(app.google.revoked, []);
+    assert.deepEqual(typesOf(await assertReceiptChain(db.pool, app.seed.owner)), ["CONNECTION_CREATED"]);
+
+    const gmailTokens = createGmailTokens({ pool: db.pool, custody, google: GOOGLE, fetchImpl: app.google.fetchImpl });
+    const { executor } = makeExecutor(db.pool, { revoke: gmailTokens.revoke });
+    await executor.engageStop(row.id, app.seed.owner);
+    assert.equal((await app.finish(await app.begin(), { code: "c-provisioned-new" })).status, 302);
+    const rows = await gmailRows(app.seed.owner);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].status, "revoked");
+    assert.equal(rows[0].dispatch_enabled, false);
+    assert.equal(rows[0].refresh_token_enc, null);
+    assert.notEqual(rows[1].id, row.id);
+    assert.equal(rows[1].status, "active");
+    assert.equal(rows[1].dispatch_enabled, true);
+  } finally { await app.close(); }
+});
+
+test("connect checks provisioned scopes when the exchange only reports identity scopes", async () => {
+  const app = await start();
+  try {
+    app.google.answer = { scope: "openid email" };
+    app.google.info = { aud: CLIENT, expires_in: 3599, scope: `openid email ${GMAIL_SEND_SCOPE}` };
+    assert.equal((await app.finish(await app.begin())).status, 302);
+    assert.equal((await gmailRows(app.seed.owner)).length, 1);
+    assert.equal(app.google.calls.filter((call) => call.url === TOKENINFO).length, 1);
+  } finally { await app.close(); }
+});
+
+test("connect refuses ungranted, unbound, malformed or unavailable provisioned scopes without retaining credentials", async (t) => {
+  const valid = { aud: CLIENT, sub: "sub-dana.owner@gmail.com", expires_in: "3599", scope: `openid email ${GMAIL_SEND_SCOPE}` };
+  const cases = [
+    ["partial", { info: { ...valid, scope: "openid email" } }, "gmail_send_not_granted"],
+    ["no scopes", { info: { ...valid, scope: "" } }, "gmail_send_not_granted"],
+    ["missing scope", { info: { ...valid, scope: undefined } }, "tokeninfo_scope"],
+    ["wrong audience", { info: { ...valid, aud: "other-client" } }, "tokeninfo_aud"],
+    ["missing audience", { info: { ...valid, aud: undefined } }, "tokeninfo_aud"],
+    ["wrong presenter", { info: { ...valid, azp: "other-client" } }, "tokeninfo_aud"],
+    ["wrong subject", { info: { ...valid, sub: "other-subject" } }, "tokeninfo_sub"],
+    ["wrong user id", { info: { ...valid, user_id: "other-subject" } }, "tokeninfo_sub"],
+    ["expired", { info: { ...valid, expires_in: "0" } }, "tokeninfo_expired"],
+    ["malformed", { info: [] }, "tokeninfo_malformed"],
+    ["redirect", { infoStatus: 302 }, "tokeninfo_http"],
+    ["unavailable", { infoError: true }, "tokeninfo_unavailable"],
+  ];
+  for (const [name, answer, reason] of cases) await t.test(name, async () => {
+    const errors = [];
+    const app = await start({ onError: (error) => errors.push(error) });
+    try {
+      app.google.answer = { omitScope: true };
+      Object.assign(app.google, answer);
+      const response = await app.finish(await app.begin(), { code: "c-private-canary" });
+      assert.equal(response.status, 400);
+      assert.deepEqual(await gmailRows(app.seed.owner), []);
+      assert.deepEqual(await receiptsOf(db.pool, app.seed.owner), []);
+      assert.deepEqual(app.google.revoked, ["rt-c-private-canary"]);
+      assert.equal(app.google.calls.filter((call) => call.url === TOKENINFO).length, 1, "one lookup, no retry");
+      assert.deepEqual(errors.map((error) => error.reason), [reason]);
+      assert.deepEqual(errors[0].scopeCheck, { exchange_scope_present: false, exchange_send_granted: false, tokeninfo_send_granted: reason === "gmail_send_not_granted" ? false : null });
+      assert.doesNotMatch(`${await response.text()} ${errors.map((error) => error.stack).join(" ")}`, /private-canary|private-token-provider-detail|other-client|other-subject|Bearer/);
+    } finally { await app.close(); }
+  });
 });
 
 test("access tokens come from the sealed refresh token and are reused; a revoked grant marks the connection needs_reconnect", async () => {

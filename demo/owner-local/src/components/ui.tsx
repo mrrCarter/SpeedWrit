@@ -67,8 +67,20 @@ export function ResultView({ result, compact }: { result: AgentResult; compact?:
   const tone = toneOfStatus(result.status);
   const { message, ...facts } = result;
   const isError = result.status === "denied";
+  const headline: Record<string, string> = {
+    sent: "📤 Sent: Gmail accepted it",
+    done: "✓ Done",
+    denied: "⛔ Refused before Gmail",
+    pending_approval: "⏸ Waiting for your approval",
+    unknown: "? Gmail didn't confirm, so no retry",
+    not_sent: "✕ Not sent",
+    not_done: "✕ Not done",
+    partial: "◐ Partly done",
+    jobs: "📋 Jobs this agent may do",
+  };
   return (
     <div className={`result ${tone}`}>
+      <div className="result-head">{headline[result.status] ?? result.status}</div>
       <div className="row">
         <Chip tone={tone}>{result.status}</Chip>
         {result.reasonCode && <code className="muted">{result.reasonCode}</code>}
