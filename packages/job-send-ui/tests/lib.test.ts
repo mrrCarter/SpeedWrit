@@ -89,6 +89,58 @@ describe("buildTimeline", () => {
     expect(row).toMatchObject({ label: SAY.prohibited, control: "none", tone: "denied", reason: "recipient_not_in_job" });
   });
 
+  it.each([
+    ["APPROVAL_GRANTED", "Approved by phone · version 2", "ok"],
+    ["APPROVAL_REJECTED", "Rejected by phone", "info"],
+    ["APPROVAL_REFUSED", "Phone approval not used", "info"],
+  ] as const)("attributes a phone %s to its channel without claiming a send", (type, label, tone) => {
+    // Synthetic executor-shaped detail; the phone's controller is not an identified speaker.
+    const receipt = r(1, type, { proposal: "prp_phone", version: 2, detail: {
+      approver: "own_test", channel: "phone", call_id: "call_test", voice_session: "voice_test", transcript_sha256: "a".repeat(64),
+      ...(type === "APPROVAL_GRANTED" ? { approval: "apv_test" } : {}),
+      ...(type === "APPROVAL_REFUSED" ? { reason: "dispatch_stopped" } : {}),
+    } });
+    const before = JSON.stringify(receipt);
+    const [row] = buildTimeline([receipt]);
+    expect(row).toMatchObject({ receiptId: receipt.id, seq: 1, ts: receipt.ts, label, tone, control: "none", badges: [] });
+    expect(row?.reason).toBe(type === "APPROVAL_REFUSED" ? "dispatch_stopped" : undefined);
+    if (type === "APPROVAL_REFUSED") expect(row?.explanation).toContain("Gmail was not enabled for sending at that attempt");
+    expect(row?.label).not.toMatch(/you|accepted|sent|witnessed/i);
+    expect(JSON.stringify(receipt)).toBe(before);
+  });
+
+  it.each([undefined, "browser", "future"])("does not infer phone attribution from channel %s", (channel) => {
+    const types = ["APPROVAL_GRANTED", "APPROVAL_REJECTED", "APPROVAL_REFUSED"] as const;
+    const receipts = types.map((type, i) => r(i + 1, type, { proposal: `prp_${i}`, version: 2, detail: {
+      approver: "own_test", ...(channel === undefined ? {} : { channel }),
+      ...(type === "APPROVAL_GRANTED" ? { approval: "apv_test" } : {}),
+      ...(type === "APPROVAL_REFUSED" ? { reason: "not_pending" } : {}),
+    } }));
+    const before = JSON.stringify(receipts);
+    const rows = buildTimeline(receipts);
+    expect(rows.map((row) => row.label)).toEqual(["You approved version 2", "Rejected by you", "Approval not used"]);
+    expect(rows.map((row) => row.control)).toEqual(["none", "none", "none"]);
+    expect(rows[2]?.reason).toBe("not_pending");
+    expect(JSON.stringify(receipts)).toBe(before);
+  });
+
+  it("keeps phone approval, provider acceptance, witness and a later refused decision distinct", () => {
+    const binding = { proposal: "prp_phone", version: 2 };
+    const phone = { approver: "own_test", channel: "phone", call_id: "call_test", voice_session: "voice_test", transcript_sha256: "a".repeat(64) };
+    const rows = buildTimeline([
+      r(1, "APPROVAL_GRANTED", { ...binding, detail: { ...phone, approval: "apv_test" } }),
+      r(2, "DISPATCH_RESERVED", { ...binding, detail: { dispatch: "dsp_test", approval: "apv_test" } }),
+      r(3, "PROVIDER_ACCEPTED", { ...binding, detail: { dispatch: "dsp_test", provider_message_id: "synthetic_message" } }),
+      r(4, "DELIVERY_WITNESSED", binding),
+      r(5, "APPROVAL_REFUSED", { ...binding, detail: { ...phone, call_id: "call_later", voice_session: "voice_later", reason: "not_pending" } }),
+    ]);
+    expect(rows.map((row) => row.label)).toEqual(["Approved by phone · version 2", "Send reserved", SAY.providerAccepted, "Phone approval not used"]);
+    expect(rows.map((row) => row.badges)).toEqual([[], [], [SAY.witnessed], []]);
+    expect(rows.every((row) => row.control === "none")).toBe(true);
+    expect(rows[3]).toMatchObject({ reason: "not_pending", tone: "info" });
+    expect(rows[3]?.explanation).toContain("earlier decisions and send outcomes");
+  });
+
   it("explains only supported AI-review outcomes without changing receipt controls or reasons", () => {
     const explanations = new Set<string>();
     for (const outcome of ["clear", "hold", "unavailable"]) {
