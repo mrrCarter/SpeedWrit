@@ -1,5 +1,7 @@
 # SpeedWrit (deployed at https://changed-brief-initiative-barrier.trycloudflare.com/owner-app/#/connect)
 
+or speedwrit.aidenid.com
+
 **Give people their time back: approve once, stop watching, get interrupted only by exception, inspect recorded decisions later.**
 
 AI agents can already draft your client emails. The problem is that you still read every one before it goes out, and that reading eats the time the agent saved. SpeedWrit replaces per-message checking with one decision up front. It governs the sends an agent makes **through SpeedWrit**; it does not observe other agent actions or Gmail access it does not hold.
