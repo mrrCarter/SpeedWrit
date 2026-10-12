@@ -24,9 +24,9 @@ describe("separate exact-draft phone authority", () => {
     expect(screen.getByText(/whoever controls your configured phone/)).toHaveTextContent("one exact pending draft");
     expect(screen.getByText(/This does not verify a speaker's identity/)).toBeInTheDocument();
     expect(screen.getByText(/Dial receives the exact recipient/)).toHaveTextContent("processes and transcribes");
-    expect(screen.getByText(/Only future held draft versions/)).toHaveTextContent("STOP or turning this off");
+    expect(screen.getByText(/Automatic calls apply only to future held draft versions/)).toHaveTextContent("STOP or turning this off");
     expect(screen.getByRole("link", { name: "privacy notice" })).toHaveAttribute("href", "/privacy");
-    expect(switchControl()).toHaveAccessibleDescription(/whoever controls your configured phone.*does not verify a speaker.*processes and transcribes.*STOP or turning this off/s);
+    expect(switchControl()).toHaveAccessibleDescription(/whoever controls your configured phone.*does not verify a speaker.*processes and transcribes.*STOP or turning this off.*cannot undo a decision already applied/s);
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.getAllByRole("button").map(button => button.textContent)).toEqual(["Refresh phone approval settings"]);
     fireEvent.click(refresh());

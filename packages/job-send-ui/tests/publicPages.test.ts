@@ -95,10 +95,12 @@ describe("public information routes", () => {
     expect(privacy).toContain("exact recipient, subject and full message to Dial");
     expect(privacy).toContain("a transcript hash and signed decision evidence, not the full transcript text");
     expect(privacy).toContain("separate explicit owner preferences");
+    expect(privacy).toContain("Opting out cannot undo a decision already applied");
     const terms = (await call("/terms")).body;
     expect(terms).toContain("An unclear answer or no response leaves web review pending");
     expect(terms).toContain("STOP or opting out invalidates outstanding phone approval authority");
     expect(terms).toContain("not that the recipient received or read the message");
+    expect(terms).toContain("Opting out cannot undo a decision already applied");
   });
 
   it("keeps the root redirect and the fixed file boundary", async () => {

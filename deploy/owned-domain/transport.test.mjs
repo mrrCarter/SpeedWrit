@@ -8,15 +8,15 @@ const request = (path, init) => new Request(OWNED_ORIGIN + path, init);
 const hash = (text) => createHash('sha256').update(text).digest('hex');
 const pageHashes = {
   '/about':'d53961957b773a1a04cc795c9101191671350b00b541fc762b727c8fc3b43401',
-  '/privacy':'37663ec62625bba5570aff41acc83d2b78d8d722a19c7f20c79f39245c3141e8',
-  '/terms':'466fe3401e5c8c87af726db0c1f1510856f2a684c8288f7d46189b787476e0b7',
+  '/privacy':'739d6d314656455cd99e032118eda9fd7bcbef6b3636ab499544c9a5a2bf2fa7',
+  '/terms':'3a8d8e88178854b13ed807d994f08e448d02664fbe383b6f5771a66a233a4eb8',
 };
 const noFetch = async () => { throw Error('unexpected_fetch'); };
 
 test('exact reviewed public source and deployment account/domain remain fixed', () => {
   // Git may check this TypeScript file out with CRLF on Windows; its reviewed content is LF.
   const publicSource=readFileSync(new URL('../../packages/job-send-ui/src/serve/publicPages.ts', import.meta.url),'utf8').replace(/\r\n/g,'\n');
-  assert.equal(hash(publicSource), 'd335922072c8e5e1ea69a1e3d5df1908b61e9d971188243c37cbca241af25b5b');
+  assert.equal(hash(publicSource), 'bdd042d4f23e0645479a6199e17599ebd7b8732e52c050451183bd0dd15c52b5');
   assert.deepEqual(JSON.parse(readFileSync(new URL('./wrangler.jsonc', import.meta.url), 'utf8')), {
     name:'speedwrit-public', main:'worker.ts', compatibility_date:'2026-10-11',
     workers_dev:false, preview_urls:false,
