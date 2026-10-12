@@ -74,6 +74,18 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(chipText("expires tonight")).toBe("Never: after that");
   });
 
+  it.each(["until 5pm tomorrow", "until 5pm except Friday", "do not expire tonight", "expires tonight unless I say otherwise", "until 5pm or 6pm"])("does not discard an expiry condition or negation in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "expiry" });
+  });
+
+  it.each(["tonight", "expires tonight", "ends tonight!", "until tonight", "till tonight", "good until tonight", "valid until tonight."])("preserves the complete tonight phrase %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T06:59:00.000Z" });
+  });
+
+  it.each(["until 5pm", "until 5 p.m.", "expires at 5pm.", "ends at 5pm", "till 5pm!", "by 17:00"])("preserves the complete time phrase %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T00:00:00.000Z" });
+  });
+
   it("an hour without am or pm, a time already past, or a time that doesn't exist needs one detail", () => {
     // 10 is still ahead at 09:00 either way, so only the missing am/pm can send it back.
     expect(parseLine("until 10", CTX)).toMatchObject({ status: "needs_detail", kind: "expiry", why: "Morning or evening? Add am or pm." });
@@ -85,6 +97,14 @@ describe("parseLine: the spec's table, row by row", () => {
   it("'ask me before custom wording' is allow_custom_with_approval: Ask me", () => {
     expect(limitOf(parseLine("ask me before custom wording", CTX))).toEqual({ kind: "approval" });
     expect(chipText("ask me before custom wording")).toBe("Ask me");
+  });
+
+  it.each(["do not ask me before custom wording", "don't ask me before custom wording", "never check with me before custom wording", "ask me before custom wording unless I am away", "ask me before not custom wording"])("does not reverse approval wording or discard a condition in %j", (text) => {
+    expect(parseLine(text, CTX)).not.toMatchObject({ status: "limit" });
+  });
+
+  it.each(["ask me before custom wording", "ask before custom wording!", "ask me first before any new messages", "check with me before writing different words."])("preserves supported approval wording %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "approval" });
   });
 
   it("'no links' and 'no attachments' are already on for every job: Never", () => {

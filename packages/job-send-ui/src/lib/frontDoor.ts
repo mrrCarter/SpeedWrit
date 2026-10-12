@@ -61,7 +61,7 @@ const COUNT_PATTERNS = [
 const RECIPIENT = /^(?:only|just)\s+(?:email|e-mail|mail|message|contact|send\s+to|write\s+to)\s+(.+?)\s*[.!]?$/i;
 const TONIGHT = /\b(?:expires?|ends?|until|till|good\s+until|valid\s+until)\s+tonight\b|^tonight$/i;
 const UNTIL_TIME = /\b(?:expires?\s+at|ends?\s+at|until|till|by)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?(?=\s*[.!]?$|\s)/i;
-const APPROVAL = /\b(?:ask|check\s+with)\s+(?:me\s+)?(?:first\s+)?before\b.*\b(?:custom|own|different|new|other)\s+(?:wording|words|text|messages?|emails?)\b/i;
+const APPROVAL = /\b(?:ask|check\s+with)\s+(?:me\s+)?(?:first\s+)?before\s+(?:(?:using|sending|writing)\s+)?(?:any\s+)?(?:custom|own|different|new|other)\s+(?:wording|words|text|messages?|emails?)\b/i;
 const BUILTIN = /\b(?:no|never|don'?t\s+(?:add|include|put|send|use))\s+(?:any\s+)?(links?|urls?|attachments?|html|cc|bcc)\b/i;
 const CONTENT_CHECKS: ReadonlyArray<[AiCheck, RegExp]> = [
   ["hostile_tone", /\b(?:rude|rudely|rudeness|tone|polite|impolite|hostile|sarcastic|sarcasm|aggressive|snarky|condescending)\b/i],
@@ -79,6 +79,11 @@ const hasAllWords = (haystack: string, needle: string): boolean => {
   const want = words(needle);
   return want.length > 0 && want.every((word) => have.has(word));
 };
+
+/** An extracted phrase cannot silently discard a prefix, condition, or negation. */
+function wholePhrase(text: string, match: RegExpExecArray): boolean {
+  return match.index === 0 && (match[0] === text || match[0] === text.replace(/[.!]$/, ""));
+}
 
 function parseNumber(text: string): number {
   const lower = text.toLowerCase();
@@ -134,12 +139,15 @@ function parseExpiry(line: string, ctx: ParseContext): LineState | null {
   const today = wallParts(ctx.now.getTime(), zoneOf(ctx.timeZone));
   let hour: number;
   let minute: number;
-  if (TONIGHT.test(line)) {
+  const tonight = TONIGHT.exec(line);
+  if (tonight) {
+    if (!wholePhrase(line, tonight)) return { status: "needs_detail", kind: "expiry", why: "Use one complete expiry per line, with no extra conditions." };
     hour = 23;
     minute = 59;
   } else {
     const match = UNTIL_TIME.exec(line);
     if (!match) return null;
+    if (!wholePhrase(line, match)) return { status: "needs_detail", kind: "expiry", why: "Use one complete expiry per line, with no extra conditions." };
     hour = Number(match[1]);
     minute = match[2] === undefined ? 0 : Number(match[2]);
     const meridiem = match[3]?.toLowerCase().replace(/\./g, "");
@@ -184,7 +192,7 @@ export function parseLine(line: string, ctx: ParseContext): LineState {
   if (count) {
     const maxSends = parseNumber(count[1] ?? "");
     // A substring is not a count rule: never truncate decimals/signs or drop a second condition.
-    const wholeCount = count.index === 0 && count[0] === text.replace(/[.!]$/, "");
+    const wholeCount = wholePhrase(text, count);
     found.push(
       !wholeCount
         ? { status: "needs_detail", kind: "count", why: "Use one whole-number send limit per line, with no extra conditions." }
@@ -197,7 +205,10 @@ export function parseLine(line: string, ctx: ParseContext): LineState {
   const expiry = parseExpiry(text, ctx);
   if (expiry) found.push(expiry);
 
-  if (APPROVAL.test(text)) found.push({ status: "limit", limit: { kind: "approval" } });
+  const approval = APPROVAL.exec(text);
+  if (approval) found.push(wholePhrase(text, approval)
+    ? { status: "limit", limit: { kind: "approval" } }
+    : { status: "needs_detail", kind: "approval", why: "Use a complete request to ask before custom wording, with no negation or extra conditions." });
 
   const builtin = BUILTIN.exec(text);
   if (builtin) found.push({ status: "limit", limit: { kind: "builtin", what: (builtin[1] ?? "").toLowerCase() } });
