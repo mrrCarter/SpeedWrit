@@ -41,6 +41,10 @@ import { serveOwnerApp } from "@writ/job-send-ui/serve";
 import type { AppConfig } from "./config.js";
 import { createDialCaller, createOwnerAlerts } from "./dial-alerts.js";
 export { createDialCaller, createOwnerAlerts } from "./dial-alerts.js";
+import { createVoiceApprovals } from "./dial-voice.js";
+import { createVoiceTransport } from "./dial-voice-protocol.js";
+export { createVoiceApprovals } from "./dial-voice.js";
+export { createVoiceTransport,verifyDialEvent,voiceReadback,voiceInstruction,instructionToken,confirmedVoiceDecision,confirmation,VOICE_DISCLOSURE } from "./dial-voice-protocol.js";
 
 export type Service = {
   server: Server;
@@ -73,6 +77,7 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
   // Started partway through: a failure after it (an owner app built for another key) must stop it too.
   let stopSweeper: (() => void) | undefined;
   let alerts: ReturnType<typeof createOwnerAlerts> | undefined;
+  let voice: ReturnType<typeof createVoiceApprovals> | undefined;
   try {
     // A public key id, not a secret: compare it with build:app's "key <id>" line, or every receipt on the
     // owner app's verify page reads "Signature invalid".
@@ -95,8 +100,11 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
     stopSweeper = executor.startSweeper(undefined, onError);
 
     const ownerAuth = createOwnerAuth({ host: config.host, google, store: new PgOwnerStore(pool), fetchImpl, jwks, onError });
+    voice=createVoiceApprovals({pool,host:config.host,owners:ownerAuth,dial:config.dial,
+      voice:config.voice??{live:false,webhookSecret:null},executor,transport:createVoiceTransport(config.dial.apiKey??"",fetchImpl)});
+    await voice.start();
     alerts = createOwnerAlerts({ pool, host: config.host, owners: ownerAuth, dial: config.dial,
-      jev: { configured: Boolean(config.aiReviewKey), model: config.aiReviewModel }, call: createDialCaller(config.dial, fetchImpl) });
+      jev: { configured: Boolean(config.aiReviewKey), model: config.aiReviewModel }, call: createDialCaller(config.dial, fetchImpl),voiceConfigured:voice.configured,voiceBinding:voice.binding });
     await alerts.start();
     const gmail = createGmailConnect({ host: config.host, google, pool, executor, custody, owners: ownerAuth, fetchImpl, jwks, onError });
     const oauthStore = new PgOAuthStore(pool);
@@ -104,10 +112,12 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
 
     const core = createOwnerCore({ pool, executor, mcpUrl: `${config.host}/mcp`, defaultTemplateId: template });
     const notifications = alerts;
+    const voiceDecisions=voice;
     const ownerApi = createOwnerApi({ host: config.host, owners: ownerAuth, core: { ...core,
       async engageStop(connectionId, ownerId) {
         // Pause synchronously, but notification persistence can never prevent the email STOP.
         void notifications.disableForStop(ownerId).catch(() => undefined);
+        void voiceDecisions.disableForStop(ownerId).catch(() => undefined);
         return core.engageStop(connectionId, ownerId);
       },
     }, oauthStore, secretPaths, onError });
@@ -145,7 +155,7 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
     });
 
     const handler = createApp({
-      handlers: [ownerAuth.handle, gmail.handle, alerts.handle, ownerApi, ownerApp],
+      handlers: [ownerAuth.handle, gmail.handle, alerts.handle, voice.handle, ownerApi, ownerApp],
       agent,
       log: config.accessLog ? log : undefined,
       onError,
@@ -157,6 +167,7 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
       async stop() {
         stopSweeper?.();
         await alerts?.stop();
+        await voice?.stop();
         await new Promise<void>((resolve) => server.close(() => resolve()));
         if (ownPool) await pool.end();
       },
@@ -164,6 +175,7 @@ export async function startService(config: AppConfig, options: ServiceOptions = 
   } catch (error) {
     stopSweeper?.();
     await alerts?.stop();
+    await voice?.stop();
     if (ownPool) await pool.end().catch(() => undefined);
     throw error;
   }

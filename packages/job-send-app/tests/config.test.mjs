@@ -111,3 +111,13 @@ test("Dial is private, disabled by default, and requires explicit complete live 
     assert.equal(error.message.includes(value), false);
   }
 });
+
+test("voice decisions require a distinct live flag and private webhook secret", () => {
+  assert.deepEqual(loadConfig(ENV).voice,{live:false,webhookSecret:null});
+  const dial={DIAL_LIVE:"1",DIAL_API_KEY:"synthetic-key",DIAL_FROM_NUMBER:"synthetic-source",ALERT_OWNER_ID:"own_test",OWNER_ALERT_PHONE:"+14155550123"};
+  assert.equal(loadConfig({...ENV,...dial}).voice.live,false);
+  assert.equal(problemsOf({...ENV,...dial,DIAL_VOICE_LIVE:"1"}).problems[0].name,"DIAL_WEBHOOK_SECRET");
+  assert.equal(problemsOf({...ENV,DIAL_VOICE_LIVE:"yes"}).problems[0].name,"DIAL_VOICE_LIVE");
+  const value=loadConfig({...ENV,...dial,DIAL_VOICE_LIVE:"1",DIAL_WEBHOOK_SECRET:"synthetic-webhook-secret"});
+  assert.equal(value.voice.live,true);assert.equal(value.voice.webhookSecret,"synthetic-webhook-secret");
+});

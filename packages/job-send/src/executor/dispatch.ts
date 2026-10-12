@@ -20,6 +20,7 @@ import { createReceiptWriter, type WriteReceipt } from "../receipts/store.js";
 import { isUniqueViolation, newId, one, withTx, type ExecutorTx } from "./db/tx.js";
 import { normalizeAddress } from "./render/address.js";
 import { storedVersionIntact, type Draft, type VersionCanonical } from "./render/render.js";
+import { sha256Hex } from "./hash.js";
 
 // Dispatch, STOP and UNKNOWN (spec: "Dispatch, STOP and UNKNOWN" and the transactional core of
 // "Approval and revision"). The shape follows the spec's pseudo-code:
@@ -533,6 +534,76 @@ export function createExecutor(deps: ExecutorDeps) {
     return result.ok ? sendReserved(result.reservation) : result.outcome;
   }
 
+  /** A verified Dial response is still only a candidate. Claim its exact-version authority under
+   * the same locks as approval/reservation. Opt-out, expiry, revision and STOP cannot be checked
+   * in an earlier application transaction. No public MCP or browser endpoint exposes this method. */
+  async function decideVoice(owner: string, proof: {
+    sessionId: string; callId: string; token: string; eventId: string;
+    decision: "allow" | "deny"; transcriptSha256: string; configSha256: string;
+  }): Promise<{ applied: boolean; status: "allowed" | "denied" | "no_decision"; receipt_id?: string; outcome?: DispatchOutcome }> {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(proof.token) || !/^[a-f0-9]{64}$/.test(proof.transcriptSha256) || !/^[a-f0-9]{64}$/.test(proof.configSha256)
+      || !/^[A-Za-z0-9_-]{1,200}$/.test(proof.callId) || !/^[A-Za-z0-9_-]{1,200}$/.test(proof.eventId)
+      || !["allow","deny"].includes(proof.decision)) return { applied: false, status: "no_decision" };
+    const ref = await one<{ proposal_id: string; version: number }>(pool,
+      `SELECT v.proposal_id,v.version FROM owner_voice_sessions s JOIN proposal_versions v ON v.id=s.proposal_version_id
+       JOIN proposals p ON p.id=v.proposal_id JOIN jobs j ON j.id=p.job_id WHERE s.id=$1 AND s.owner_id=$2 AND j.owner_id=$2`,
+      [proof.sessionId,owner]);
+    if (!ref) return { applied: false, status: "no_decision" };
+    const result = await withTx(pool, owner, async (tx): Promise<{
+      applied: boolean; status: "allowed" | "denied" | "no_decision"; receipt_id?: string; reservation?: Reservation;
+    }> => {
+      const locked = await lockInOrder(tx,ref.proposal_id,{number:ref.version});
+      const {p,v,job,con}=locked;
+      // Additional authority locks follow the existing proposal/version/job/connection locks,
+      // and precede the owner's receipt counter. Opt-out takes only the preference/session locks.
+      const pref=await one<{enabled:boolean;config_sha256:string}>(tx.client,"SELECT enabled,config_sha256 FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner]);
+      const session=await one<{status:string;call_id:string;token_sha256:string;version_sha256:string;config_sha256:string;proposal_version_id:string;expires_at:Date;consumed_at:Date|null}>(tx.client,
+        "SELECT * FROM owner_voice_sessions WHERE id=$1 AND owner_id=$2 FOR UPDATE",[proof.sessionId,owner]);
+      if (!session || session.status!=="awaiting_reply" || session.consumed_at!==null || session.call_id!==proof.callId
+        || session.token_sha256!==sha256Hex(proof.token) || session.proposal_version_id!==v.id) return {applied:false,status:"no_decision"};
+      // Consume a valid callback before the savepoint: a refused decision is also single-use.
+      await tx.client.query(`UPDATE owner_voice_sessions SET consumed_at=clock_timestamp(),event_id=$2,decision=$3,
+        transcript_sha256=$4,status='no_decision',finished_at=clock_timestamp() WHERE id=$1`,
+        [proof.sessionId,proof.eventId,proof.decision,proof.transcriptSha256]);
+      const now=(await one<{now:Date}>(tx.client,"SELECT clock_timestamp() AS now"))!.now;
+      const fields=receiptContext(locked);
+      const channel={channel:"phone",call_id:proof.callId,voice_session:proof.sessionId,transcript_sha256:proof.transcriptSha256};
+      if (!pref?.enabled || pref.config_sha256!==proof.configSha256 || session.config_sha256!==proof.configSha256 || session.expires_at<=now) return {applied:false,status:"no_decision"};
+      await tx.client.query("SAVEPOINT voice_decision");
+      try {
+        if(v.version!==p.current_version)throw new Refusal("superseded");
+        if(v.state!=="pending"||p.status!=="pending")throw new Refusal("not_pending");
+        if(session.version_sha256!==v.sha256)throw new Refusal("hash_mismatch");
+        // Denial also refuses a stale/stopped session; it never resurrects or changes job authority.
+        if(job.status!=="active"||con.status!=="active"||!con.dispatch_enabled)throw new Refusal("dispatch_stopped");
+        if(job.expires_at<=now)throw new Refusal("job_expired");
+        if(proof.decision==="deny") {
+          await tx.client.query("UPDATE proposal_versions SET state='rejected' WHERE id=$1",[v.id]);
+          await tx.client.query("UPDATE proposals SET status='rejected' WHERE id=$1",[p.id]);
+          const receipt_id=await writeReceipt(tx,"APPROVAL_REJECTED",{...fields,detail:{approver:owner,...channel}});
+          await tx.client.query("UPDATE owner_voice_sessions SET status='denied' WHERE id=$1",[proof.sessionId]);
+          return {applied:true,status:"denied",receipt_id};
+        }
+        const approvalId=newId("apv");
+        await tx.client.query("INSERT INTO approvals(id,proposal_version_id,version_sha256,approver) VALUES($1,$2,$3,$4)",[approvalId,v.id,v.sha256,owner]);
+        const receipt_id=await writeReceipt(tx,"APPROVAL_GRANTED",{...fields,detail:{approval:approvalId,approver:owner,...channel}});
+        const reservation=await reserve(tx,locked,approvalId);
+        await tx.client.query("UPDATE owner_voice_sessions SET status='allowed' WHERE id=$1",[proof.sessionId]);
+        return {applied:true,status:"allowed",receipt_id,reservation};
+      } catch(error) {
+        if(!(error instanceof Refusal))throw error;
+        await tx.client.query("ROLLBACK TO SAVEPOINT voice_decision");
+        const receipt_id=await writeReceipt(tx,"APPROVAL_REFUSED",{...fields,detail:{reason:error.reason,approver:owner,...channel}});
+        return {applied:false,status:"no_decision",receipt_id};
+      }
+    });
+    if(result.reservation) {
+      const outcome=await sendReserved(result.reservation);
+      return {applied:true,status:"allowed",...(result.receipt_id?{receipt_id:result.receipt_id}:{}),outcome};
+    }
+    return result;
+  }
+
   /** send_reserved(d): outside any transaction, exactly one provider call. */
   async function sendReserved(r: Reservation): Promise<DispatchOutcome> {
     const con = await one<{ dispatch_enabled: boolean; status: ConnectionStatus }>(
@@ -862,6 +933,7 @@ export function createExecutor(deps: ExecutorDeps) {
     withTx: <T>(owner: string, fn: (tx: ExecutorTx) => Promise<T>) => withTx(pool, owner, fn),
     approveAndReserve,
     approve,
+    decideVoice,
     sendReserved,
     finish,
     sweep,
