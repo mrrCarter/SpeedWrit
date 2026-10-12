@@ -1,5 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { generateReceiptKeyPair, signReceipt } from "@writ/job-send";
+import { receiptEnvelopeText } from "@writ/job-send/verify";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { receiptFromApi } from "../src/app/api";
 import { SAY, findNeverSay } from "../src/lib/copy";
 import type { TimelineReceipt } from "../src/lib/timeline";
 import { ConfirmJob, jobLists, type JobDraft } from "../src/screens/ConfirmJob";
@@ -45,6 +48,37 @@ const PENDING: PendingVersion = {
 };
 
 describe("FlightRecorder", () => {
+  it.each([
+    ["APPROVAL_GRANTED", "Approved by phone · version 2"],
+    ["APPROVAL_REJECTED", "Rejected by phone"],
+    ["APPROVAL_REFUSED", "Phone approval not used"],
+  ] as const)("renders phone %s as history and opens its original canonical receipt", (type, label) => {
+    // A synthetic receipt signed with an ephemeral test key, never a runtime credential.
+    const signed = signReceipt(generateReceiptKeyPair().privateKey, {
+      id: "rcp_phone", seq: 1, type, ts: "2026-10-11T19:00:00Z", owner: "own_test", job: "job_test",
+      proposal: "prp_test", version: 2, version_sha256: "b".repeat(64),
+      detail: { approver: "own_test", channel: "phone", call_id: "call_test", voice_session: "voice_test", transcript_sha256: "a".repeat(64),
+        ...(type === "APPROVAL_GRANTED" ? { approval: "apv_test" } : {}),
+        ...(type === "APPROVAL_REFUSED" ? { reason: "superseded" } : {}),
+      },
+    });
+    const original = receiptEnvelopeText(signed);
+    const receipt = receiptFromApi({ id: "rcp_phone", seq: 1, type, ...signed });
+    const before = JSON.stringify(receipt);
+    const onResolve = vi.fn();
+    render(<FlightRecorder jobId="job_test" receipts={[receipt]} receiptText={() => receipt.text} onResolve={onResolve} />);
+    const toggle = screen.getByRole("button", { name: new RegExp(label) });
+    const row = toggle.closest("li")!;
+    expect(within(row).getAllByRole("button")).toEqual([toggle]);
+    expect(within(row).queryByRole("status")).toBeNull();
+    expect(screen.queryByText(SAY.providerAccepted)).toBeNull();
+    if (type === "APPROVAL_REFUSED") expect(within(row).getByText("superseded")).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText("Receipt rcp_phone").textContent).toBe(original);
+    expect(JSON.stringify(receipt)).toBe(before);
+    expect(onResolve).not.toHaveBeenCalled();
+  });
+
   it("a denial reads 'Prohibited by your job: not approvable' and its row offers NO approve or resolve control", () => {
     render(<FlightRecorder jobId="job_1" receipts={RECEIPTS} receiptText={() => "{}"} onResolve={vi.fn()} />);
     const denial = screen.getByText(SAY.prohibited).closest("li")!;
