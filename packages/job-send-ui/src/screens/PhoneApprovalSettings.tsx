@@ -65,7 +65,7 @@ export function PhoneApprovalSettings({ load, setEnabled, onSignIn }: PhoneAppro
   };
 
   // An unknown initial state can recover through GET without offering enrollment or authority.
-  if (preference === null && (uncertain || pending)) return (
+  if (preference === null && uncertain) return (
     <section className="card" aria-labelledby="phone-approval-recovery-title">
       <h2 id="phone-approval-recovery-title">Phone approval settings</h2>
       {pending ? <p role="status">Checking phone approval settings…</p> :
