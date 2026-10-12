@@ -27,6 +27,13 @@ export function OwnerShell({ path, children }: { path: string; children: ReactNo
       <div className="owner-layout">
         <div className="owner-context"><span className="owner-eyebrow">OWNER WORKSPACE</span><p>{active?.[2] ?? "Choose a page above to continue."}</p></div>
         <main id="owner-content" tabIndex={-1}>{children}</main>
+        <footer className="owner-footer">
+          <nav aria-label="Public information">
+            <a href="/about">About</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Demo terms</a>
+          </nav>
+        </footer>
       </div>
     </div>
   );
