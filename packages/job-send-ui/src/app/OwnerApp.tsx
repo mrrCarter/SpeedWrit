@@ -69,7 +69,7 @@ function useCall(signIn: (href: string) => void, route: string) {
       try {
         return await call();
       } catch (error) {
-        if (error instanceof OwnerApiError && error.code === "sign_in") signIn(signInHref(`/${route}`));
+        if (error instanceof OwnerApiError && error.code === "sign_in") signIn(signInHref(`/owner-app/${route}`));
         else setProblem(error instanceof OwnerApiError ? error.code : "unknown_error");
         return undefined;
       }

@@ -419,12 +419,25 @@ describe("OwnerApp", () => {
 
   it("a 401 on an alert's link comes back to the same link after sign-in", async () => {
     const { signIn } = renderApp("#/exceptions/p3", fakeApi({ pending: async () => Promise.reject(new OwnerApiError(401, "sign_in")) }));
-    await waitFor(() => expect(signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2F%23%2Fexceptions%2Fp3"));
+    await waitFor(() => expect(signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2Fowner-app%2F%23%2Fexceptions%2Fp3"));
+    // A root return would hit the owned-domain redirect to Connections instead of this proposal.
+    const origin = "https://speedwrit.aidenid.com";
+    const signInUrl = new URL(signIn.mock.calls[0]![0], origin);
+    const returnUrl = new URL(signInUrl.searchParams.get("return_to")!, origin);
+    expect(returnUrl.pathname).toBe("/owner-app/");
+    expect(returnUrl.hash).toBe("#/exceptions/p3");
+    cleanup();
+    const api = fakeApi({ pending: async () => ({ pending: [PENDING, { ...PENDING, proposalId: "p3", version: 1 }] }) });
+    renderApp(returnUrl.hash, api);
+    const focused = await screen.findByRole("region", { name: "From your alert" });
+    expect(within(focused).getByRole("article", { name: "Version 1 of p3" })).toBeTruthy();
+    expect(api.approve).not.toHaveBeenCalled();
+    expect(api.reject).not.toHaveBeenCalled();
   });
 
   it("a 401 anywhere leaves for sign-in and comes back to the same view", async () => {
     const { signIn } = renderApp("#/exceptions", fakeApi({ pending: async () => Promise.reject(new OwnerApiError(401, "sign_in")) }));
-    await waitFor(() => expect(signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2F%23%2Fexceptions"));
+    await waitFor(() => expect(signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2Fowner-app%2F%23%2Fexceptions"));
   });
 
   it("another request failure shows its code and offers the recorder without claiming a send outcome", async () => {
