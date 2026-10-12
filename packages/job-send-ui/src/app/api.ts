@@ -66,6 +66,7 @@ export function jobDraftFromAuthority(job: Job): JobDraft {
   return {
     jobId: job.job_id,
     policyVersion: job.policy_version,
+    agentConnectionId: job.agent_connection,
     recipient: job.recipient,
     purpose: job.purpose,
     template: { id: job.template.id },

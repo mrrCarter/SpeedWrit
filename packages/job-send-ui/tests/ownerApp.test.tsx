@@ -147,6 +147,7 @@ describe("the owner API client", () => {
     expect(jobDraftFromAuthority(AUTHORITY)).toEqual({
       jobId: "job_1",
       policyVersion: 1,
+      agentConnectionId: "ac_1",
       recipient: "dana@acme.com",
       purpose: AUTHORITY.purpose,
       template: { id: "tpl_recap" },
@@ -292,6 +293,9 @@ describe("OwnerApp", () => {
   it("New job: explicit limits make a draft; Confirm posts the returned authority hash, then opens the job", async () => {
     const { api, navigate } = renderApp("#/new");
     const review = await screen.findByRole("button", { name: "Review this job" });
+    const agent = screen.getByRole("region", { name: "Agent for this job" });
+    expect(within(agent).getByText("ChatGPT").tagName).toBe("BDI");
+    expect(within(agent).getByText("ac_1")).toBeVisible();
     expect(screen.getByRole("spinbutton", { name: "Sends at most" })).toHaveValue(3);
     expect(api.createJob).not.toHaveBeenCalled();
     expect(api.confirmJob).not.toHaveBeenCalled();
@@ -316,6 +320,35 @@ describe("OwnerApp", () => {
     fireEvent.click(confirm);
     await waitFor(() => expect(api.confirmJob).toHaveBeenCalledWith("job_1", SHA));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("#/jobs/job_1"));
+  });
+
+  it("New job: confirmation shows the returned authority's agent, not captured or newer connection metadata", async () => {
+    const current = { ...CONNECTED, agentConnectionId: "ac_newer", agentConnection: { ...CONNECTED.agentConnection!, label: "Newer client" } };
+    const connectState = vi.fn().mockResolvedValueOnce(CONNECTED).mockResolvedValue(current);
+    const returned = { ...AUTHORITY, job_id: "job_returned", agent_connection: "ac_authority" };
+    const api = fakeApi({ connectState, createJob: vi.fn(async () => ({ job: returned, authoritySha256: SHA })) });
+    renderApp("#/new", api);
+    const review = await screen.findByRole("button", { name: "Review this job" });
+    await api.connectState(); // Another read now sees a newer connection; the open form keeps its snapshot.
+    expect(screen.getByText("ac_1")).toBeVisible();
+    expect(screen.queryByText("ac_newer")).toBeNull();
+    fireEvent.click(review);
+    const confirm = await screen.findByRole("region", { name: "Confirm job job_returned" });
+    expect(api.createJob).toHaveBeenCalledWith(expect.objectContaining({ agent_connection_id: "ac_1" }));
+    expect(within(confirm).getByText("ac_authority")).toBeVisible();
+    for (const stale of ["ac_1", "ChatGPT", "ac_newer", "Newer client"]) expect(within(confirm).queryByText(stale)).toBeNull();
+    expect(api.confirmJob).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Confirm job" }));
+    await waitFor(() => expect(api.confirmJob).toHaveBeenCalledWith("job_returned", SHA));
+    expect(connectState).toHaveBeenCalledTimes(2);
+  });
+
+  it("New job: the captured stable ID remains visible when a connection label is unavailable", async () => {
+    renderApp("#/new", fakeApi({ connectState: async () => ({ ...CONNECTED, agentConnection: null }) }));
+    const agent = await screen.findByRole("region", { name: "Agent for this job" });
+    expect(within(agent).getByText("ac_1")).toBeVisible();
+    expect(within(agent).queryByText("ChatGPT")).toBeNull();
+    expect(screen.getByRole("button", { name: "Review this job" })).toBeEnabled();
   });
 
   it("New job: cannot review a draft until connection identity has loaded", async () => {
