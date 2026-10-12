@@ -61,7 +61,9 @@ const COUNT_PATTERNS = [
 // Recognition only: an unsupported quantity must not disappear into a later AI/content match.
 // A unit is required, so a price such as "$300 refunds" or a clock time is not a send count.
 const COUNT_QUANTITY = `(?:\\d\\S*|${Object.keys(NUMBER_WORDS).join("|")}|zero|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|half|quarter|dozen|couple|few|several)`;
-const COUNT_BEARING = new RegExp(`\\b${COUNT_QUANTITY}\\s*${MESSAGES}\\b|\\b${MESSAGES}\\s*(?:(?:max|maximum|at\\s+most|up\\s+to|no\\s+more\\s+than|only)\\s+)?${COUNT_QUANTITY}(?=$|[\\s,;.!])`, "i");
+// Attached known qualifiers are recognizable intent, not additional accepted count grammar.
+const COUNT_PREFIX = "(?:max|maximum|at\\s*most|up\\s*to|no\\s*more\\s*than|only)";
+const COUNT_BEARING = new RegExp(`\\b(?:${COUNT_PREFIX}\\s*(?:of\\s*)?)?${COUNT_QUANTITY}\\s*${MESSAGES}\\b|\\b${MESSAGES}\\s*(?:${COUNT_PREFIX}\\s*)?${COUNT_QUANTITY}(?=$|[\\s,;.!])`, "i");
 const RECIPIENT = /^(?:only|just)\s+(?:email|e-mail|mail|message|contact|send\s+to|write\s+to)\s+(.+?)\s*[.!]?$/i;
 const TONIGHT = /\b(?:expires?|ends?|until|till|good\s+until|valid\s+until)\s+tonight\b|^tonight$/i;
 const UNTIL_TIME = /\b(?:expires?\s+at|ends?\s+at|until|till|by)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?(?=\s*[.!]?$|\s)/i;

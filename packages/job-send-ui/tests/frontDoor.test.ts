@@ -77,6 +77,12 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
   });
 
+  it.each([
+    "max2emails", "maximum2messages", "no more than2emails", "atmost3sends", "upto3emails", "only3messages", "emailsmax2", "messagesatmost3", "sendsup to3",
+  ].flatMap((count) => ["avoid rude tone", "no links", "until tonight"].map((rule) => `${count}, ${rule}`)))("recognizes attached known count qualifiers without accepting their unsupported grammar in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
+  });
+
   it("'expires tonight' and 'until 6pm' are computed in the owner's time zone: Never after that", () => {
     expect(limitOf(parseLine("expires tonight", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T06:59:00.000Z" });
     expect(limitOf(parseLine("until 6pm", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T01:00:00.000Z" });

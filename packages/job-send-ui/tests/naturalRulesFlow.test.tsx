@@ -54,6 +54,17 @@ describe("natural rules through the real owner API client", () => {
     expect(posts).toEqual([]);
   });
 
+  it.each(["max2emails", "no more than2emails", "emailsmax2"].flatMap((count) =>
+    ["avoid rude tone", "no links", "until tonight"].map((rule) => `${count}, ${rule}`),
+  ))("does not submit default authority after ignoring an attached count qualifier in %j", async (value) => {
+    const posts = setup();
+    fireEvent.change(await screen.findByRole("textbox", { name: "Custom rules in your words" }), { target: { value } });
+    expect(screen.getByRole("button", { name: "Review this job" })).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(screen.queryByRole("button", { name: "Confirm job" })).toBeNull();
+    expect(posts).toEqual([]);
+  });
+
   it("compiles typed rules to the draft POST, then confirms only the server-returned authority", async () => {
     const posts = setup();
     fireEvent.change(await screen.findByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "don't sound rude\nno links" } });
