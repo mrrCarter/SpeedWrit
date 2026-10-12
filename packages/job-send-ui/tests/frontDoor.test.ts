@@ -97,8 +97,22 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(parseLine("don't email after 5pm", CTX)).toEqual({ status: "unmatched" });
     expect(parseLine("send at 10.30", CTX)).toEqual({ status: "unmatched" });
     expect(limitOf(parseLine("$300 refunds never", CTX))).toMatchObject({ kind: "ai_review" });
+    for (const wording of ["email prices politely", "email up to date pricing", "email only prices discussed"]) {
+      expect(limitOf(parseLine(wording, CTX))).toMatchObject({ kind: "ai_review" });
+    }
+    for (const wording of ["email at 5pm politely", "email only at 5pm politely"]) {
+      expect(parseLine(wording, CTX)).toEqual({ status: "unmatched" });
+    }
     const contact = { name: "Dana", email: "dana2@acme.test" };
     expect(limitOf(parseLine("only email dana2@acme.test", { ...CTX, contacts: [contact] }))).toMatchObject({ kind: "recipient", email: contact.email });
+  });
+
+  it.each(["emails -3", "emails +3", "emails max of-3", "messages up to +0.5", "sends -.5", "emails .5", "emails -three", "messages only +two"])("keeps a signed or leading-dot unit-first quantity unresolved in %j", (count) => {
+    expect(parseLine(`${count}, avoid rude tone`, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
+  });
+
+  it.each(["emails of 2", "messages maximum of two", "sends at most of 2", "e-mails up to of 1/3", "messages no more than of 0.5", "emails only of -2", "messagesmaximumoftwo", "emails -2", "emails +2", "emails max -2", "emails max +2"])("keeps the independently reported unit-first matrix row unresolved in %j", (count) => {
+    expect(parseLine(`${count}, avoid rude tone`, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
   });
 
   it("'expires tonight' and 'until 6pm' are computed in the owner's time zone: Never after that", () => {
