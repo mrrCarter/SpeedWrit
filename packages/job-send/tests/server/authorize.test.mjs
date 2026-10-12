@@ -8,7 +8,7 @@ import { request } from "node:http";
 import { CHALLENGE, HOST, NOW, RESOURCE, barrier, codeParams, connect, register, rpc, start, token } from "./support/harness.mjs";
 
 const PER_CONNECTION = "https://chatgpt.com/connector/oauth/conn_abc123";
-const CSP = (redirectOrigin) => `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' ${redirectOrigin}`;
+const CSP = (redirectOrigin, nonce) => `default-src 'none'; style-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' ${redirectOrigin}`;
 
 const authorizeQuery = (clientId, overrides = {}) =>
   new URLSearchParams({
@@ -51,7 +51,7 @@ test("the whole connection: register, consent, allow, code, token, /mcp", async 
   try {
     const { clientId, view, res } = await consentFor(app);
     assert.equal(res.headers.get("x-frame-options"), "DENY");
-    assert.equal(res.headers.get("content-security-policy"), CSP("https://chatgpt.com"));
+    assert.equal(res.headers.get("content-security-policy"), CSP("https://chatgpt.com", view.styleNonce));
     // Not no-referrer: that makes a browser POST the form with "Origin: null", which answerConsent refuses (CSRF),
     // so Allow could never succeed in a real browser. same-origin keeps the real Origin on the POST.
     assert.equal(res.headers.get("referrer-policy"), "same-origin");
@@ -75,6 +75,26 @@ test("the whole connection: register, consent, allow, code, token, /mcp", async 
     const issued = await token(app.base, codeParams(clientId, params.code));
     assert.equal(issued.status, 200);
     assert.equal((await rpc(app.base, issued.body.access_token, "tools/list")).status, 200);
+  } finally {
+    await app.close();
+  }
+});
+
+test("consent styles use a fresh response-local nonce without changing form or script authority", async () => {
+  const app = await start();
+  try {
+    const first = await consentFor(app);
+    const second = await consentFor(app);
+    for (const { view, res } of [first, second]) {
+      assert.match(view.styleNonce, /^[A-Za-z0-9_-]{43}$/);
+      assert.notEqual(view.styleNonce, view.requestId);
+      assert.equal(res.headers.get("content-security-policy"), CSP("https://chatgpt.com", view.styleNonce));
+      assert.equal(res.headers.get("referrer-policy"), "same-origin");
+      assert.equal(res.headers.get("x-frame-options"), "DENY");
+      assert.equal(res.headers.get("cache-control"), "no-store");
+      assert.equal(Object.hasOwn(app.store.pending.get(hashToken(view.requestId)), "styleNonce"), false);
+    }
+    assert.notEqual(first.view.styleNonce, second.view.styleNonce);
   } finally {
     await app.close();
   }
@@ -305,9 +325,9 @@ test("the consent page's form-action names the origin the answer redirects to, f
   try {
     const { client_id } = (await register(app.base, { redirect_uris: [PER_CONNECTION, fallback], client_name: "Inspector" })).body;
     const perConnection = await showConsent(app.base, authorizeQuery(client_id, { redirect_uri: PER_CONNECTION }));
-    assert.equal(perConnection.headers.get("content-security-policy"), CSP("https://chatgpt.com"));
+    assert.equal(perConnection.headers.get("content-security-policy"), CSP("https://chatgpt.com", app.views.at(-1).styleNonce));
     const local = await showConsent(app.base, authorizeQuery(client_id, { redirect_uri: fallback }));
-    assert.equal(local.headers.get("content-security-policy"), CSP("http://localhost:6274"));
+    assert.equal(local.headers.get("content-security-policy"), CSP("http://localhost:6274", app.views.at(-1).styleNonce));
   } finally {
     await app.close();
   }

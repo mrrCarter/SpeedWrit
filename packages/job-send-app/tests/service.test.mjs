@@ -279,7 +279,14 @@ test("the ChatGPT connect path through the composed service: sign in, allow, cod
     // The consent page, then Allow, exactly as the browser posts it.
     const consent = await fetch(`${at}/oauth/authorize?${query}`, { headers: { cookie: session }, redirect: "manual" });
     assert.equal(consent.status, 200);
-    const requestId = /name="request_id" value="([^"]+)"/.exec(await consent.text())?.[1];
+    const consentHtml = await consent.text();
+    const styleNonce = /<style nonce="([A-Za-z0-9_-]{43})">/.exec(consentHtml)?.[1];
+    assert.ok(styleNonce, "the real consent renderer uses the response's style nonce");
+    assert.equal(consent.headers.get("content-security-policy"),
+      `default-src 'none'; style-src 'nonce-${styleNonce}'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://chatgpt.com`);
+    assert.equal(consent.headers.get("referrer-policy"), "same-origin");
+    assert.doesNotMatch(consentHtml, /<script|\sstyle=|<link|<iframe/);
+    const requestId = /name="request_id" value="([^"]+)"/.exec(consentHtml)?.[1];
     assert.ok(requestId, "the consent form carries its request id");
     const allowed = await fetch(`${at}/oauth/authorize`, {
       method: "POST",

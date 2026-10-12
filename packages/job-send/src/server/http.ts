@@ -49,6 +49,8 @@ export interface OwnerSessions {
 export type ConsentView = {
   /** Posted back as request_id. One-time, bound to this owner, and the only thing the answer is trusted for. */
   requestId: string;
+  /** Fresh, response-local authorization for the static consent stylesheet; never submitted. */
+  styleNonce: string;
   request: { clientId: string; clientName: string; redirectUri: string; codeChallenge: string; state: string | null; scope: string };
   ownerEmail: string;
 };
@@ -243,8 +245,10 @@ export function createJobSendHandler(options: JobSendHttpOptions): (req: Incomin
       state: checked.state,
       expires_at: now() + PENDING_TTL_SECONDS,
     });
+    const styleNonce = generateOpaqueToken();
     const html = authorize.renderConsent({
       requestId,
+      styleNonce,
       ownerEmail: owner.email,
       request: {
         clientId: checked.client_id,
@@ -259,7 +263,7 @@ export function createJobSendHandler(options: JobSendHttpOptions): (req: Incomin
       "content-type": "text/html; charset=utf-8",
       // form-action names the redirect's origin: browsers apply it to the redirect after the POST too, so 'self'
       // alone would stop Allow and Deny before they reach the client (machine measured it in Chrome, #515).
-      "content-security-policy": `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' ${new URL(checked.redirect_uri).origin}`,
+      "content-security-policy": `default-src 'none'; style-src 'nonce-${styleNonce}'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' ${new URL(checked.redirect_uri).origin}`,
       "x-frame-options": "DENY",
       // same-origin, never no-referrer: under no-referrer a browser sends "Origin: null" with the form's POST,
       // and answerConsent refuses a null Origin (CSRF), so every real Allow was a 403. same-origin still sends

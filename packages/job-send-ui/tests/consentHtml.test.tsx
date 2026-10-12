@@ -8,6 +8,7 @@ import type { ConsentView } from "../src/screens/Consent";
 
 const VIEW: ConsentView = {
   requestId: "req_9f2c1e0b7a6d5c4b",
+  styleNonce: "nonce_for_local_fixture_only",
   request: {
     clientId: "cli_123",
     clientName: "ChatGPT",
@@ -35,6 +36,17 @@ describe("renderConsentHtml", () => {
     expect(forms).toHaveLength(1);
     expect(forms[0]?.getAttribute("method")).toBe("post");
     expect(forms[0]?.getAttribute("action")).toBe("/oauth/authorize");
+  });
+
+  it("clearly separates connecting from job authority and labels the decision without auto-focusing it", () => {
+    const doc = parse(renderConsentHtml(VIEW));
+    expect(doc.querySelectorAll("h1")).toHaveLength(1);
+    expect(doc.querySelector("h1")?.textContent).toBe("Connect an agent to SpeedWrit");
+    expect(doc.body.textContent).toContain("It does not create a job or send an email.");
+    expect(doc.body.textContent).toContain("It has no jobs until you confirm one.");
+    expect(doc.querySelectorAll("[autofocus]")).toHaveLength(0);
+    expect(doc.querySelector("button[value=allow]")?.textContent).toBe("Allow");
+    expect(doc.querySelector("button[value=deny]")?.textContent).toBe("Deny");
   });
 
   it("posts only request_id and the decision: no client, redirect, state or challenge fields", () => {
@@ -68,15 +80,19 @@ describe("renderConsentHtml", () => {
     expect(findNeverSay(text)).toEqual([]);
   });
 
-  it("escapes every value, and carries no script and no inline style, so a strict CSP holds", () => {
+  it("escapes every value, and uses only the nonced static stylesheet with no scripts or external assets", () => {
     const hostile = {
       ...VIEW,
       request: { ...VIEW.request, clientName: '<script>alert(1)</script><img src=x onerror=alert(2)>' },
       requestId: '"><input name="client_id" value="evil',
+      styleNonce: 'nonce"><script>alert(3)</script>',
     };
     const html = renderConsentHtml(hostile);
     const doc = parse(html);
-    expect(doc.querySelectorAll("script, style, img, [style], [onerror], [onclick]")).toHaveLength(0);
+    expect(doc.querySelectorAll("script, img, [style], [onerror], [onclick]")).toHaveLength(0);
+    expect(doc.querySelectorAll("style")).toHaveLength(1);
+    expect(doc.querySelector("style")?.getAttribute("nonce")).toBe(hostile.styleNonce);
+    expect(doc.querySelector("style")?.textContent).toBe(parse(renderConsentHtml(VIEW)).querySelector("style")?.textContent);
     // Nothing loads from anywhere: no link, frame, object or base, and no src or href at all (machine, #514).
     expect(parse(renderConsentHtml(VIEW)).querySelectorAll("[src], [href], link, iframe, object, embed, base")).toHaveLength(0);
     expect(doc.querySelector("bdi")?.textContent).toBe(hostile.request.clientName);
