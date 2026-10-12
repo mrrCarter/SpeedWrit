@@ -65,7 +65,10 @@ async function harness(t,overrides={}){
  let dial={live:true,apiKey:'synthetic-api-key',ownerId:seed.owner,phone:'+14155550123',fromNumber:'+14155550456'};
  const transport={async place(args){const id='call_'+seed.owner+'_'+(++serial);calls.push(args);const r={id,from:dial.fromNumber,to:dial.phone,direction:'outbound',instruction:args.instruction,voiceRuntime:'managed',status:{state:'Terminated',terminationType:'completed',cancelRequested:false,cancelPending:false}};records.set(id,r);return r;},async get(id){return records.get(id);}};
  const owners={owner:async req=>req.headers['x-test-owner']?{id:req.headers['x-test-owner'],email:'owner@example.test'}:null};
- const makeVoice=()=>createVoiceApprovals({pool:db.pool,host:HOST,owners,dial,voice:{live:true,webhookSecret:SECRET},executor,transport,pollMs:3600000});let voice=makeVoice();await voice.start();
+ let beforeConnect=async()=>{};
+ const voicePool={query:db.pool.query.bind(db.pool),async connect(){await beforeConnect();return db.pool.connect();}};
+ const pauseNextConnect=()=>{let entered,release;const blocked=new Promise(r=>{entered=r;}),gate=new Promise(r=>{release=r;});beforeConnect=async()=>{beforeConnect=async()=>{};entered();await gate;};return {blocked,release};};
+ const makeVoice=()=>createVoiceApprovals({pool:voicePool,host:HOST,owners,dial,voice:{live:true,webhookSecret:SECRET},executor,transport,pollMs:3600000});let voice=makeVoice();await voice.start();
  const restart=async(change={})=>{await voice.stop();dial={...dial,...change};voice=makeVoice();await voice.start();};
  const server=createServer((req,res)=>void voice.handle(req,res).then(handled=>{if(!handled){res.writeHead(404);res.end();}}));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base='http://127.0.0.1:'+server.address().port;
  t.after(async()=>{await voice.stop();await new Promise(resolve=>server.close(resolve));});
@@ -75,7 +78,7 @@ async function harness(t,overrides={}){
  const session=async()=> (await db.pool.query('SELECT * FROM owner_voice_sessions WHERE owner_id=$1 ORDER BY created_at DESC',[seed.owner])).rows[0];
  const prepare=async(decision='allow',choice=decision)=>{await enable();const v=await held();await voice.tick();const s=await session();const row=(await db.pool.query('SELECT recipient,subject,body,version FROM proposal_versions WHERE id=$1',[v.versionId])).rows[0];records.get(s.call_id).transcriptTurns=turns(row,decision,choice);return {v,s,row};};
  const callback=async(s,eventId='evt_'+seed.owner)=>{const e=envelope(s.call_id,eventId),body=Buffer.from(JSON.stringify(e));const r=await fetch(base+'/integrations/dial/voice/events',{method:'POST',headers:signed(body,eventId),body});return {status:r.status,body:await r.json()};};
- return {seed,executor,stub,get dial(){return dial;},owners,get voice(){return voice;},transport,calls,records,request,enable,held,session,prepare,callback,restart};
+ return {seed,executor,stub,get dial(){return dial;},owners,get voice(){return voice;},transport,calls,records,request,enable,held,session,prepare,callback,restart,pauseNextConnect};
 }
 test('preference is default off, authenticated, fixed-owner and disclosure/origin bound',async t=>{
  const h=await harness(t);assert.equal((await h.request('/owner/voice/preferences')).body.enabled,false);
@@ -178,4 +181,12 @@ test('definitively unplaced long readback falls back after the generic cursor al
 
 test('repeated start is idempotent and does not cancel a current call',async t=>{
  const h=await harness(t),{s}=await h.prepare();await h.voice.start();assert.equal((await h.session()).status,'awaiting_reply');await h.callback(s);assert.equal(h.stub.callCount,1);assert.equal(h.calls.length,1);
+});
+for(const action of ['Off','STOP'])test(`later ${action} cannot be overtaken by an enable awaiting pool acquisition`,async t=>{
+ const h=await harness(t),barrier=h.pauseNextConnect();const enabling=h.enable();await barrier.blocked;
+ const off=action==='Off'?h.request('/owner/voice/preferences',{enabled:false}):h.voice.disableForStop(h.seed.owner);
+ // Let the later control reach its queue while the first is blocked. Before serialization it
+ // commits first, then the released older enable incorrectly restores authority.
+ await Promise.race([off,new Promise(r=>setTimeout(r,25))]);barrier.release();await Promise.all([enabling,off]);
+ assert.equal((await h.request('/owner/voice/preferences')).body.enabled,false);await h.held();await h.voice.tick();assert.equal(h.calls.length,0);
 });

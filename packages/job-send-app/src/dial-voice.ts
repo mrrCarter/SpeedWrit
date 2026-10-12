@@ -24,15 +24,17 @@ export function createVoiceApprovals(options:Options){
  const binding=digest(JSON.stringify({owner:dial.ownerId,phone:dial.phone,source:dial.fromNumber,disclosure:VOICE_DISCLOSURE}));
  let timer:ReturnType<typeof setInterval>|undefined,running:Promise<void>|null=null,closed=false,started=false,generation=0;
  let controller:AbortController|null=null;
+ let controls:Promise<unknown>=Promise.resolve();
+ function control<T>(action:()=>Promise<T>):Promise<T>{const next=controls.then(action);controls=next.catch(()=>undefined);return next;}
  async function tx<T>(work:(c:PoolClient)=>Promise<T>):Promise<T>{const c=await pool.connect();try{await c.query("BEGIN");const value=await work(c);await c.query("COMMIT");return value;}catch(e){await c.query("ROLLBACK").catch(()=>undefined);throw e;}finally{c.release();}}
  const maxSeq=async(c:PoolClient,owner:string)=>Number((await c.query("SELECT COALESCE(MAX(seq),0) AS seq FROM receipts WHERE owner_id=$1",[owner])).rows[0].seq);
  async function cancel(c:PoolClient,owner:string){await c.query("UPDATE owner_voice_sessions SET status='cancelled',finished_at=clock_timestamp() WHERE owner_id=$1 AND status IN ('queued','placing','awaiting_reply')",[owner]);}
  async function preference(owner:string){const eligible_owner=owner===dial.ownerId;const row=eligible_owner?(await pool.query("SELECT enabled,config_sha256 FROM owner_voice_preferences WHERE owner_id=$1",[owner])).rows[0]:null;
   return {configured:eligible_owner&&configured,eligible_owner,enabled:eligible_owner&&configured&&row?.enabled===true&&row.config_sha256===binding,disclosure_version:VOICE_DISCLOSURE};}
  async function setEnabled(owner:string,enabled:boolean){if(owner!==dial.ownerId)throw new Refusal("not_found",404);if(enabled&&!configured)throw new Refusal("not_configured");generation++;
-  await tx(async c=>{await c.query("INSERT INTO owner_voice_preferences(owner_id) VALUES($1) ON CONFLICT DO NOTHING",[owner]);await c.query("SELECT owner_id FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner]);await cancel(c,owner);
-   await c.query("UPDATE owner_voice_preferences SET enabled=$2,cursor_seq=$3,disclosure_version=$4,config_sha256=$5,updated_at=clock_timestamp() WHERE owner_id=$1",[owner,enabled,await maxSeq(c,owner),enabled?VOICE_DISCLOSURE:null,enabled?binding:null]);});return preference(owner);}
- async function disableForStop(owner:string){if(owner!==dial.ownerId)return;generation++;await tx(async c=>{await c.query("SELECT owner_id FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner]);await c.query("UPDATE owner_voice_preferences SET enabled=false,updated_at=clock_timestamp() WHERE owner_id=$1",[owner]);await cancel(c,owner);});}
+  await control(()=>tx(async c=>{await c.query("INSERT INTO owner_voice_preferences(owner_id) VALUES($1) ON CONFLICT DO NOTHING",[owner]);await c.query("SELECT owner_id FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner]);await cancel(c,owner);
+   await c.query("UPDATE owner_voice_preferences SET enabled=$2,cursor_seq=$3,disclosure_version=$4,config_sha256=$5,updated_at=clock_timestamp() WHERE owner_id=$1",[owner,enabled,await maxSeq(c,owner),enabled?VOICE_DISCLOSURE:null,enabled?binding:null]);}));return preference(owner);}
+ async function disableForStop(owner:string){if(owner!==dial.ownerId)return;generation++;await control(()=>tx(async c=>{await c.query("SELECT owner_id FROM owner_voice_preferences WHERE owner_id=$1 FOR UPDATE",[owner]);await c.query("UPDATE owner_voice_preferences SET enabled=false,updated_at=clock_timestamp() WHERE owner_id=$1",[owner]);await cancel(c,owner);}));}
  async function enqueue(c:PoolClient,owner:string,versionId:string,sha:string){await c.query(`INSERT INTO owner_voice_sessions(id,owner_id,proposal_version_id,version_sha256,config_sha256,expires_at)
   VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes') ON CONFLICT(proposal_version_id) DO NOTHING`,["voice_"+randomUUID(),owner,versionId,sha,binding]);}
  async function requestCall(owner:string,body:Record<string,unknown>){
@@ -129,5 +131,5 @@ export function createVoiceApprovals(options:Options){
    }else throw new Refusal("method_not_allowed",405);
   }catch(e){send(res,e instanceof Refusal?e.status:500,{error:e instanceof Refusal?e.code:"voice_error"});}return true;
  };
- return {configured,binding,handle,start,tick,disableForStop,async stop(){closed=true;generation++;if(timer)clearInterval(timer);controller?.abort();await running;}};
+ return {configured,binding,handle,start,tick,disableForStop,async stop(){closed=true;generation++;if(timer)clearInterval(timer);controller?.abort();await running;await controls;}};
 }
