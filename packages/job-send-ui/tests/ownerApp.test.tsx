@@ -160,11 +160,13 @@ describe("the owner API client", () => {
     });
   });
 
-  it("approval codes become the Say table's words; nothing claims more", () => {
+  it("approval responses distinguish a refusal from a provider outcome", () => {
     expect(approveWords({ status: "accepted", receipt_id: "r" })).toBe(SAY.providerAccepted);
     expect(approveWords({ status: "unknown", receipt_id: "r" })).toBe(SAY.outcomeUnknown);
     expect(approveWords({ status: "not_sent", receipt_id: "r" })).toBe(SAY.notSent);
-    expect(approveWords({ status: "refused", reason: "superseded", receipt_id: "r" })).toBe(`${SAY.notSent}: superseded`);
+    for (const reason of ["superseded", "not_pending"]) {
+      expect(approveWords({ status: "refused", reason, receipt_id: "r" })).toBe(`Approval not used: ${reason}. Check the job's Flight Recorder for its recorded outcome.`);
+    }
   });
 });
 

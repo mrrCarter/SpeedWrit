@@ -57,7 +57,7 @@ export function approveWords(answer: ApproveAnswer): string {
   if (answer.status === "accepted") return SAY.providerAccepted;
   if (answer.status === "unknown") return SAY.outcomeUnknown;
   if (answer.status === "not_sent") return SAY.notSent;
-  return answer.reason ? `${SAY.notSent}: ${answer.reason}` : SAY.notSent;
+  return `Approval not used${answer.reason ? `: ${answer.reason}` : ""}. Check the job's Flight Recorder for its recorded outcome.`;
 }
 
 /** Runs a call; a 401 leaves for sign-in, any other failure becomes its fixed error code. */
