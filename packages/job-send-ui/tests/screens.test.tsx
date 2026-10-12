@@ -70,6 +70,32 @@ describe("FlightRecorder", () => {
     expect(screen.getByText(SAY.outcomeUnknown)).toBeTruthy();
   });
 
+  it("keeps AI-review explanations informational after approval and preserves the opened receipt", () => {
+    const review: TimelineReceipt = { id: "review", seq: 1, type: "AI_REVIEW", ts: "2026-10-11T19:00:00Z", proposal: "p1", version: 1, detail: { outcome: "hold", flags: ["hostile_tone"], probs_bp: { hostile_tone: 7500 }, model: "jev-1.13.0", ms: 7 } };
+    const history: TimelineReceipt[] = [
+      review,
+      { ...review, id: "approval", seq: 2, type: "APPROVAL_GRANTED", detail: {} },
+      { ...review, id: "accepted", seq: 3, type: "PROVIDER_ACCEPTED", detail: { provider_message_id: "message" } },
+    ];
+    const canonical = JSON.stringify({ key_id: "test", payload: JSON.stringify(review), signature: "test-only" });
+    const onResolve = vi.fn();
+    const { rerender } = render(<FlightRecorder jobId="job_1" receipts={[review]} receiptText={() => canonical} onResolve={onResolve} />);
+    const toggle = screen.getByRole("button", { name: /AI review/ });
+    const row = toggle.closest("li")!;
+    const explanation = row.querySelector("p")?.textContent;
+    expect(explanation?.length).toBeGreaterThan(0);
+    rerender(<FlightRecorder jobId="job_1" receipts={history} receiptText={() => canonical} onResolve={onResolve} />);
+    expect(row.querySelector("p")?.textContent).toBe(explanation);
+    expect(within(row).getAllByRole("button")).toEqual([toggle]);
+    expect(within(row).queryByRole("link")).toBeNull();
+    expect(within(row).queryByRole("status")).toBeNull();
+    expect(screen.getByText(SAY.providerAccepted)).toBeTruthy();
+    expect(findNeverSay(document.body.textContent ?? "")).toEqual([]);
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText("Receipt review").textContent).toBe(canonical);
+    expect(onResolve).not.toHaveBeenCalled();
+  });
+
   it("each row opens its receipt", () => {
     render(<FlightRecorder jobId="job_1" receipts={RECEIPTS} receiptText={(id) => `{"id":"${id}"}`} onResolve={vi.fn()} />);
     fireEvent.click(screen.getByText(/Job confirmed/));
