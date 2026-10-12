@@ -64,8 +64,17 @@ export function PhoneApprovalSettings({ load, setEnabled, onSignIn }: PhoneAppro
     }
   };
 
+  // An unknown initial state can recover through GET without offering enrollment or authority.
+  if (preference === null && (uncertain || pending)) return (
+    <section className="card" aria-labelledby="phone-approval-recovery-title">
+      <h2 id="phone-approval-recovery-title">Phone approval settings</h2>
+      {pending ? <p role="status">Checking phone approval settings…</p> :
+        <p role="alert">Phone approval settings are unconfirmed. Refresh to check availability. Refreshing does not enable approvals or place a call.</p>}
+      <button type="button" disabled={pending} onClick={() => void refresh()}>Refresh phone approval settings</button>
+    </section>
+  );
   // Do not offer enrollment or authority unless the backend confirms this configured owner.
-  // An initial failed read reveals no controls; an existing confirmed card retains its last state on a failed refresh.
+  // An existing confirmed card retains its last state on a failed refresh.
   if (!preference?.configured || !preference.eligible_owner) return null;
   return (
     <section className="card" aria-labelledby="phone-approval-title">

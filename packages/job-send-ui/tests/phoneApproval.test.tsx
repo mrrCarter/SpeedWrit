@@ -84,11 +84,35 @@ describe("separate exact-draft phone authority", () => {
     expect(h.setEnabled).not.toHaveBeenCalled();
   });
 
-  it("does not reveal controls or arbitrary server fields on an initial read failure", async () => {
-    const h = setup(snapshot(), { load: vi.fn(async () => ({ configured: "secret value" } as unknown as VoiceApprovalPreference)) });
-    await act(async () => {});
-    expect(screen.queryByRole("checkbox")).toBeNull(); expect(document.body.textContent).not.toContain("secret value");
-    expect(h.load).toHaveBeenCalledTimes(1); expect(h.setEnabled).not.toHaveBeenCalled();
+  it.each(["lost", "malformed"])("offers a GET-only retry after an initial %s read, without exposing enrollment or raw errors", async failure => {
+    let resolve!: (value: VoiceApprovalPreference) => void;
+    const load = vi.fn().mockImplementationOnce(async () => {
+      if (failure === "lost") throw new Error("private provider token details");
+      return { configured: "private provider token details" };
+    }).mockImplementationOnce(() => new Promise<VoiceApprovalPreference>(done => { resolve = done; }));
+    const h = setup(snapshot(), { load });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Phone approval settings are unconfirmed");
+    expect(screen.queryByRole("checkbox")).toBeNull(); expect(screen.queryByRole("textbox")).toBeNull();
+    expect(document.body.textContent).not.toContain("private provider token details");
+    expect(screen.getAllByRole("button")).toEqual([refresh()]);
+    expect(load).toHaveBeenCalledTimes(1); expect(h.setEnabled).not.toHaveBeenCalled();
+    fireEvent.click(refresh());
+    expect(refresh()).toBeDisabled(); expect(screen.getByRole("status")).toHaveTextContent("Checking phone approval settings");
+    expect(screen.queryByRole("checkbox")).toBeNull(); fireEvent.click(refresh());
+    expect(load).toHaveBeenCalledTimes(2);
+    await act(async () => resolve(snapshot(false)));
+    expect(await screen.findByRole("checkbox")).not.toBeChecked();
+    expect(screen.queryByRole("alert")).toBeNull(); expect(h.setEnabled).not.toHaveBeenCalled();
+  });
+
+  it("keeps enrollment hidden when an initial failed read recovers to an ineligible owner", async () => {
+    const load = vi.fn().mockRejectedValueOnce(new Error("read lost"))
+      .mockResolvedValueOnce({ ...snapshot(), configured: false, eligible_owner: false });
+    const h = setup(snapshot(), { load }); await screen.findByRole("alert");
+    fireEvent.click(refresh());
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(screen.queryByRole("checkbox")).toBeNull(); expect(screen.queryByRole("textbox")).toBeNull();
+    expect(h.setEnabled).not.toHaveBeenCalled(); expect(load).toHaveBeenCalledTimes(2);
   });
 
   it("locks previously confirmed authority if refresh fails, and hides it when eligibility is revoked", async () => {
