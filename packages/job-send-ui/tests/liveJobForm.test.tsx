@@ -46,6 +46,23 @@ describe("LiveJobForm", () => {
     expect(onUse).toHaveBeenCalledWith(expect.objectContaining({ recipient: "dana@acme.test", maxSends: 3, expiresAt: "2026-10-12T00:00:00.000Z" }));
   });
 
+  it.each([["3.5 sends max", "5"], ["1,000 sends max", "1"], ["-3 sends max", "3"], ["3 sends max except on Friday", "3"]])("never silently changes the meaning of %j", (rule, count) => {
+    const { onUse, review } = setup();
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Sends at most" }), { target: { value: count } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: rule } });
+    expect(review()).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+  });
+
+  it("requires multiple typed count lines to agree with the control", () => {
+    const { onUse, review } = setup();
+    fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "three sends max\ntwo sends max" } });
+    expect(review()).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(onUse).not.toHaveBeenCalled();
+  });
+
   it("blocks a typed two-send limit against the structured three without changing either", () => {
     const { onUse, review } = setup();
     fireEvent.change(screen.getByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "two sends max" } });

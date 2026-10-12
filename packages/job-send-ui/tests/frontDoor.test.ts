@@ -59,6 +59,14 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(parseLine("0 sends max", CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
   });
 
+  it.each(["3.5 sends max", ".3 sends max", "1,000 sends max", "1/3 sends max", "-3 sends max", "+3 sends max", "3 sends max or 5", "3 sends max and two sends max", "three sends max except on Friday"])("does not truncate a count or discard a contradictory suffix in %j", (text) => {
+    expect(parseLine(text, CTX)).not.toMatchObject({ status: "limit" });
+  });
+
+  it.each(["three sends max", "3 sends max.", "no more than 3 emails!"])("still accepts the complete count phrase %j", (text) => {
+    expect(limitOf(parseLine(text, CTX))).toEqual({ kind: "count", maxSends: 3 });
+  });
+
   it("'expires tonight' and 'until 6pm' are computed in the owner's time zone: Never after that", () => {
     expect(limitOf(parseLine("expires tonight", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T06:59:00.000Z" });
     expect(limitOf(parseLine("until 6pm", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T01:00:00.000Z" });

@@ -183,10 +183,14 @@ export function parseLine(line: string, ctx: ParseContext): LineState {
   const count = COUNT_PATTERNS.map((pattern) => pattern.exec(text)).find((match) => match !== null);
   if (count) {
     const maxSends = parseNumber(count[1] ?? "");
+    // A substring is not a count rule: never truncate decimals/signs or drop a second condition.
+    const wholeCount = count.index === 0 && count[0] === text.replace(/[.!]$/, "");
     found.push(
-      Number.isInteger(maxSends) && maxSends >= 1 && maxSends <= MAX_SENDS_LIMIT
-        ? { status: "limit", limit: { kind: "count", maxSends } }
-        : { status: "needs_detail", kind: "count", why: `A job allows 1 to ${MAX_SENDS_LIMIT} sends.` },
+      !wholeCount
+        ? { status: "needs_detail", kind: "count", why: "Use one whole-number send limit per line, with no extra conditions." }
+        : Number.isInteger(maxSends) && maxSends >= 1 && maxSends <= MAX_SENDS_LIMIT
+          ? { status: "limit", limit: { kind: "count", maxSends } }
+          : { status: "needs_detail", kind: "count", why: `A job allows 1 to ${MAX_SENDS_LIMIT} sends.` },
     );
   }
 
