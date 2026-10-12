@@ -25,6 +25,8 @@ const APP_PATHS = new Set([
   '/owner/jobs/confirm', '/owner/versions/approve', '/owner/versions/reject',
   '/owner/dispatches/resolve', '/owner/integrations',
   '/owner/alerts/preferences', '/owner/alerts/test',
+  '/owner/voice/preferences', '/owner/voice/calls',
+  '/integrations/dial/voice/events',
 ]);
 // Same path shape as packages/job-send/src/server/secret-path.ts; authentication stays upstream.
 const SECRET_PATH = /^\/mcp\/c\/[A-Za-z0-9_-]{43}$/;

@@ -135,6 +135,47 @@ test('unlisted routes and malformed secret paths never reach the upstream',async
   }
 });
 
+test('phone preference and exact-call routes preserve owner authentication and decisions',async()=>{
+  for(const path of ['/owner/voice/preferences','/owner/voice/calls']){
+    for(const method of ['GET','POST']){
+      let calls=0;
+      const body='{"enabled":false,"disclosure_version":"voice-approval-v1"}';
+      const headers={cookie:'__Host-fixture=one',origin:OWNED_ORIGIN,'content-type':'application/json'};
+      const r=await createWorker(async(req,init)=>{
+        calls++;assert.equal(req.url,UPSTREAM_ORIGIN+path);assert.equal(req.method,method);
+        for(const [name,value] of Object.entries(headers))assert.equal(req.headers.get(name),value);
+        if(method==='POST')assert.equal(await req.text(),body);
+        assert.equal(init.redirect,'manual');
+        return new Response('backend-owned decision',{status:403});
+      }).fetch(request(path,{method,headers,...(method==='POST'?{body}:{})}));
+      assert.equal(calls,1);assert.equal(r.status,403);
+    }
+  }
+});
+
+test('Dial callback forwards original signed bytes and headers without supplying owner Origin',async()=>{
+  const path='/integrations/dial/voice/events';
+  const raw=Buffer.from(' {"id":"event_fixture","type":"call.transcribed","text":"fixture ✓"}\n','utf8');
+  const headers={'content-type':'application/json','x-dial-event-id':'event_fixture','x-dial-event-type':'call.transcribed','x-dial-signature':'t=100,v1='+ 'a'.repeat(64)};
+  let calls=0;
+  const r=await createWorker(async(req,init)=>{
+    calls++;assert.equal(req.url,UPSTREAM_ORIGIN+path);assert.equal(req.method,'POST');
+    assert.equal(req.headers.get('origin'),null);
+    for(const [name,value] of Object.entries(headers))assert.equal(req.headers.get(name),value);
+    assert.deepEqual(Buffer.from(await req.arrayBuffer()),raw);
+    assert.equal(init.redirect,'manual');
+    return new Response('signature rejected upstream',{status:401});
+  }).fetch(request(path,{method:'POST',headers,body:raw}));
+  assert.equal(calls,1);assert.equal(r.status,401);
+  assert.equal(await r.text(),'signature rejected upstream');
+});
+
+test('voice and callback route variants do not expand the allowlist',async()=>{
+  for(const path of ['/owner/voice','/owner/voice/admin','/owner/voice/calls/extra','/integrations/dial/voice/events/','/integrations/dial/voice/secret']){
+    assert.equal((await createWorker(noFetch).fetch(request(path,{method:'POST',body:'fixture'}))).status,404);
+  }
+});
+
 test('Origin is never repaired; upstream rejection is returned',async()=>{
   const r=await createWorker(async(req)=>{
     assert.equal(req.headers.get('origin'),'null');return new Response('denied',{status:403});
