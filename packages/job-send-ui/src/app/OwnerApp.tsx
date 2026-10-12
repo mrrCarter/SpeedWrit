@@ -13,6 +13,7 @@ import type { Contact } from "../lib/frontDoor";
 import { ConfirmJob } from "../screens/ConfirmJob";
 import { Connect } from "../screens/Connect";
 import { IntegrationsCard } from "../screens/IntegrationsCard";
+import { PhoneApprovalSettings } from "../screens/PhoneApprovalSettings";
 import { AgentConnectionSetup } from "../screens/AgentConnectionSetup";
 import { ExceptionCard, type PendingVersion } from "../screens/ExceptionCard";
 import { FlightRecorder } from "../screens/FlightRecorder";
@@ -85,6 +86,8 @@ function ConnectView({ api, connectGmailHref, call, signIn }: { api: OwnerApi; c
   const [state, setState] = useState<ConnectState | null>(null);
   const loadIntegrations = useCallback(() => api.integrations(), [api]);
   const setAlertsEnabled = useCallback((enabled: boolean) => api.setAlertsEnabled(enabled), [api]);
+  const loadPhoneApproval = useCallback(() => api.voiceApprovalPreference(), [api]);
+  const setPhoneApproval = useCallback((enabled: boolean) => api.setVoiceApprovalsEnabled(enabled), [api]);
   const testAlert = useCallback(() => api.testAlert(), [api]);
   const integrationSignIn = useCallback(() => signIn(signInHref("/owner-app/#/connect")), [signIn]);
   const refresh = useCallback(async () => {
@@ -106,6 +109,7 @@ function ConnectView({ api, connectGmailHref, call, signIn }: { api: OwnerApi; c
         onStop={() => state.connectionId && void call(() => api.stop(state.connectionId!)).then(load)}
       />
       <IntegrationsCard load={loadIntegrations} setEnabled={setAlertsEnabled} test={testAlert} onSignIn={integrationSignIn} />
+      <PhoneApprovalSettings load={loadPhoneApproval} setEnabled={setPhoneApproval} onSignIn={integrationSignIn} />
       {/* Connect while none is linked; Reconnect when Google's grant lapsed (needs_reconnect), or the owner has no way back. */}
       {!connectGmail ? null : !state.gmail ? (
         <a href={connectGmail}>Connect Gmail</a>

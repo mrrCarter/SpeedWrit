@@ -9,6 +9,7 @@ import type { PendingVersion } from "../screens/ExceptionCard";
 import type { CompleteDraft } from "../screens/FrontDoor";
 import type { TimelineReceipt } from "../lib/timeline";
 import { parseIntegrationMetadata, parseAlertPreference, parseAlertTest } from "../lib/integrations";
+import { parseVoiceApprovalPreference, VOICE_APPROVAL_DISCLOSURE } from "../lib/voiceApproval";
 
 export type Owner = { id: string; email: string };
 
@@ -209,6 +210,13 @@ export class OwnerApi {
   }
   async setAlertsEnabled(enabled: boolean) {
     return this.confirmed(await this.call<unknown>("POST", "/owner/alerts/preferences", { enabled }), parseAlertPreference);
+  }
+  async voiceApprovalPreference() {
+    return this.confirmed(await this.call<unknown>("GET", "/owner/voice/preferences"), parseVoiceApprovalPreference);
+  }
+  async setVoiceApprovalsEnabled(enabled: boolean) {
+    const body = enabled ? { enabled: true, disclosure_version: VOICE_APPROVAL_DISCLOSURE } : { enabled: false };
+    return this.confirmed(await this.call<unknown>("POST", "/owner/voice/preferences", body), parseVoiceApprovalPreference);
   }
   async testAlert() {
     return this.confirmed(await this.call<unknown>("POST", "/owner/alerts/test", {}), parseAlertTest);
