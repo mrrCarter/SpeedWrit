@@ -65,6 +65,15 @@ describe("natural rules through the real owner API client", () => {
     expect(posts).toEqual([]);
   });
 
+  it.each(["emailsmaxof2", "messagesofmaximum3", "sends only of tops 2", "2ofmaxemails", "3 only of tops messages", "maxofonly2emails", "onlymessagesmaxof2", "emails max of 2", "emails max of2", "emails maximum of 2", "emails at most of 2", "sends up to of 2", "emails no more than of 2"])("makes no draft after a modeled count connector is mixed with AI wording in %j", async (count) => {
+    const posts = setup();
+    fireEvent.change(await screen.findByRole("textbox", { name: "Custom rules in your words" }), { target: { value: `${count}, avoid rude tone` } });
+    expect(screen.getByRole("button", { name: "Review this job" })).toBeDisabled();
+    fireEvent.submit(screen.getByRole("form", { name: "New job" }));
+    expect(screen.queryByRole("button", { name: "Confirm job" })).toBeNull();
+    expect(posts).toEqual([]);
+  });
+
   it("compiles typed rules to the draft POST, then confirms only the server-returned authority", async () => {
     const posts = setup();
     fireEvent.change(await screen.findByRole("textbox", { name: "Custom rules in your words" }), { target: { value: "don't sound rude\nno links" } });

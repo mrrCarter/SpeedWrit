@@ -83,6 +83,24 @@ describe("parseLine: the spec's table, row by row", () => {
     expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
   });
 
+  it.each([
+    "emailsmaxof2", "messagesofmaximum3", "sends only of tops 2", "2ofmaxemails", "3 only of tops messages", "maxofonly2emails", "onlymessagesmaxof2",
+    "emails max of 2", "emails max of2", "emails maximum of 2", "emails at most of 2", "sends up to of 2", "emails no more than of 2",
+  ].flatMap((count) => ["avoid rude tone", "no links", "until tonight"].map((rule) => `${count}, ${rule}`)))("keeps modeled count connectors unresolved in either direction in %j", (text) => {
+    expect(parseLine(text, CTX)).toMatchObject({ status: "needs_detail", kind: "count" });
+  });
+
+  it("does not treat verb or clock wording as a send-count connector", () => {
+    expect(limitOf(parseLine("max of 2 emails", CTX))).toEqual({ kind: "count", maxSends: 2 });
+    expect(limitOf(parseLine("check tone when sending messages at 5pm", CTX))).toMatchObject({ kind: "ai_review" });
+    expect(limitOf(parseLine("avoid promising $300 refunds in emails", CTX))).toMatchObject({ kind: "ai_review" });
+    expect(parseLine("don't email after 5pm", CTX)).toEqual({ status: "unmatched" });
+    expect(parseLine("send at 10.30", CTX)).toEqual({ status: "unmatched" });
+    expect(limitOf(parseLine("$300 refunds never", CTX))).toMatchObject({ kind: "ai_review" });
+    const contact = { name: "Dana", email: "dana2@acme.test" };
+    expect(limitOf(parseLine("only email dana2@acme.test", { ...CTX, contacts: [contact] }))).toMatchObject({ kind: "recipient", email: contact.email });
+  });
+
   it("'expires tonight' and 'until 6pm' are computed in the owner's time zone: Never after that", () => {
     expect(limitOf(parseLine("expires tonight", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T06:59:00.000Z" });
     expect(limitOf(parseLine("until 6pm", CTX))).toEqual({ kind: "expiry", expiresAt: "2026-10-12T01:00:00.000Z" });
