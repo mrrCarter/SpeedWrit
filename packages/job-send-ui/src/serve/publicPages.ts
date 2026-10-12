@@ -16,9 +16,10 @@ const about = page("Email authority you can review", "Give an agent a specific e
 <p>Availability depends on this demo's configuration, Google consent and your agent client's support. A successful connection does not itself authorize sending a message.</p></section>
 <section><h2>A job defines the permission</h2>
 <p>Each job belongs to its owner and names a Gmail connection, an agent connection, one recipient, a template, a send limit and an expiry. Review the server's complete job before confirming it. Custom wording requires the owner's approval when enabled; a client cannot approve its own proposal.</p>
+<p>This shared demo currently supports a configured list of demonstration recipients. Adding your own contacts or selecting arbitrary recipients is not available.</p>
 <p>Code checks the job's limits before sending. TypeSafe's Jev review can hold applicable message text for owner review; it can miss a problem and cannot waive a code refusal. Optional Dial notifications call a configured owner with a generic notice to open SpeedWrit. A phone call cannot approve or send an email.</p></section>
 <section><h2>Connect ChatGPT or another MCP client</h2>
-<p>Use this site's origin followed by <a href="/mcp"><code>/mcp</code></a> as the public MCP URL, with OAuth. Complete sign-in and consent for the named agent connection. Each grant is associated with the signed-in owner; jobs also bind to a particular agent connection.</p>
+<p>Use the public MCP server URL shown in <a href="/owner-app/#/connect">SpeedWrit Connections</a> and choose OAuth. Complete sign-in and consent for the named agent connection. Each grant is associated with the signed-in owner; jobs also bind to a particular agent connection. The address hosting these information pages may differ from the running app.</p>
 <p>Keep agent credentials and any private connection URL private. Owner approval happens in the owner app. Supported callback URLs and client capabilities can limit which clients connect.</p></section>
 <section><h2>Read the result carefully</h2>
 <p>Signed receipts record actions and outcomes. Provider accepted means Gmail accepted the request; it does not prove inbox delivery. An unknown outcome keeps its reserved send slot, including after an owner records that the message was not seen. Do not treat uncertainty as permission to retry.</p>

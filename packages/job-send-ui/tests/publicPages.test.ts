@@ -66,13 +66,21 @@ describe("public information routes", () => {
       const { body } = await call(path);
       for (const link of ["/about", "/privacy", "/terms", "/owner-app/", "/public.css"]) expect(body).toContain(`href="${link}"`);
       const links = [...body.matchAll(/href="([^"]+)"/g)].map((match) => match[1]!);
-      expect(links.every((href) => ["/about", "/privacy", "/terms", "/owner-app/", "/public.css", "/mcp", "mailto:carther91@gmail.com"].includes(href))).toBe(true);
+      expect(links.every((href) => ["/about", "/privacy", "/terms", "/owner-app/", "/owner-app/#/connect", "/public.css", "mailto:carther91@gmail.com"].includes(href))).toBe(true);
     }
     const css = await call("/public.css");
     expect(css.status).toBe(200); expect(css.headers["content-type"]).toBe("text/css; charset=utf-8");
     expect(css.body).toContain(":focus-visible"); expect(css.body).not.toMatch(/url\(|@import/);
     const head = await call("/public.css", "HEAD");
     expect(head.status).toBe(200); expect(head.body).toBe(""); expect(head.headers["content-length"]).toBe(String(Buffer.byteLength(css.body)));
+  });
+
+  it("points to Connections for the actual MCP endpoint and explains the recipient restriction", async () => {
+    const { body } = await call("/about");
+    expect(body).toContain('href="/owner-app/#/connect"');
+    expect(body).not.toContain('href="/mcp"');
+    expect(body).toContain("configured list of demonstration recipients");
+    expect(body).toContain("Adding your own contacts or selecting arbitrary recipients is not available");
   });
 
   it("keeps the root redirect and the fixed file boundary", async () => {
