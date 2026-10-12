@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OwnerAppConfig } from "../app/config";
+import { PUBLIC_PAGE_CSP, PUBLIC_PAGES } from "./publicPages";
 
 export type { OwnerAppConfig };
 
@@ -75,6 +76,16 @@ export function serveOwnerApp(options: { dir: string; config: OwnerAppConfig; re
 
   return async (req, res) => {
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    const publicPage = PUBLIC_PAGES.get(path);
+    if (publicPage) {
+      const headers = { "content-security-policy": PUBLIC_PAGE_CSP, "cache-control": "no-store" };
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        send(req, res, 405, { ...headers, allow: "GET, HEAD", "content-type": "text/plain; charset=utf-8" }, Buffer.from("Method not allowed"));
+      } else {
+        send(req, res, 200, { ...headers, "content-type": publicPage.contentType }, Buffer.from(publicPage.body, "utf8"));
+      }
+      return true;
+    }
     if (path === "/") {
       if (req.method !== "GET" && req.method !== "HEAD") return false;
       send(req, res, 302, { location: OWNER_APP_PATH, "cache-control": "no-store" });
