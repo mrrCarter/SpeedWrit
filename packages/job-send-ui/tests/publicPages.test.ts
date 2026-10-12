@@ -85,6 +85,22 @@ describe("public information routes", () => {
     expect(body).toContain("Adding your own contacts or selecting arbitrary recipients is not available");
   });
 
+  it("distinguishes generic notices from explicit exact-draft voice authority and discloses transcript retention", async () => {
+    const about = (await call("/about")).body;
+    expect(about).toContain("exact-draft phone approvals, off by default");
+    expect(about).toContain("Generic notifications grant no approval authority");
+    expect(about).toContain("This does not verify the speaker's identity");
+    const privacy = (await call("/privacy")).body;
+    expect(privacy).toContain("Generic notices do not include the email body");
+    expect(privacy).toContain("exact recipient, subject and full message to Dial");
+    expect(privacy).toContain("a transcript hash and signed decision evidence, not the full transcript text");
+    expect(privacy).toContain("separate explicit owner preferences");
+    const terms = (await call("/terms")).body;
+    expect(terms).toContain("An unclear answer or no response leaves web review pending");
+    expect(terms).toContain("STOP or opting out invalidates outstanding phone approval authority");
+    expect(terms).toContain("not that the recipient received or read the message");
+  });
+
   it("keeps the root redirect and the fixed file boundary", async () => {
     expect((await call("/")).headers.location).toBe("/owner-app/");
     for (const path of ["/about/", "/About", "/privacy.html", "/public.css.map", "/publicPages.ts", "/receipt-key.json", "/owner-app/receipt-key.json", "/about/%2e%2e/receipt-key.json", "/privacy/..%2fpackage.json"]) {
