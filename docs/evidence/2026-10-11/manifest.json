@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "kind": "selected original canonical receipt envelopes",
+  "historical_source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce",
+  "receipt_key_file": "receipt-key.json",
+  "files": [
+    {
+      "file": "receipts/rcp_A_i3OZ22WSdaS0ij.json",
+      "sha256": "5e4a75638e8f2be360667834297d5d2edb66cfa482708879de58371861161a1e",
+      "bytes": 701,
+      "receipt_id": "rcp_A_i3OZ22WSdaS0ij",
+      "type": "PROVIDER_ACCEPTED",
+      "sequence": 10,
+      "timestamp": "2026-10-11T21:52:06Z",
+      "key_id": "8d7fe1becc5eff89",
+      "source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce"
+    },
+    {
+      "file": "receipts/rcp_QfnP4-NpIeD0etqn.json",
+      "sha256": "1103500f39f3bd39baba5428de509bade49ab037fdc39544ec8980d4603a1310",
+      "bytes": 637,
+      "receipt_id": "rcp_QfnP4-NpIeD0etqn",
+      "type": "ATTEMPT_DENIED",
+      "sequence": 26,
+      "timestamp": "2026-10-11T22:16:51Z",
+      "key_id": "8d7fe1becc5eff89",
+      "source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce"
+    },
+    {
+      "file": "receipts/rcp_Inj40qVf69D8xhqm.json",
+      "sha256": "983b5be60354a82552a9e4d164f879a6a052a0f83e85d07f1eca3be1a8dcdb59",
+      "bytes": 613,
+      "receipt_id": "rcp_Inj40qVf69D8xhqm",
+      "type": "ATTEMPT_DENIED",
+      "sequence": 15,
+      "timestamp": "2026-10-11T22:00:48Z",
+      "key_id": "8d7fe1becc5eff89",
+      "source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce"
+    },
+    {
+      "file": "receipts/rcp_QD2lfO9NJuIKsdXL.json",
+      "sha256": "8a56320d8655505c810820755c1624fb352a6e89c6c1f42f437e700b38f5b4a7",
+      "bytes": 670,
+      "receipt_id": "rcp_QD2lfO9NJuIKsdXL",
+      "type": "APPROVAL_GRANTED",
+      "sequence": 16,
+      "timestamp": "2026-10-11T22:02:51Z",
+      "key_id": "8d7fe1becc5eff89",
+      "source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce"
+    },
+    {
+      "file": "receipts/rcp_V8zlL_P8gApSqzFu.json",
+      "sha256": "9513ae28134c770729ace7aaeaaf4ae1576e512f3b0833d43b716ff0ad46e570",
+      "bytes": 701,
+      "receipt_id": "rcp_V8zlL_P8gApSqzFu",
+      "type": "PROVIDER_ACCEPTED",
+      "sequence": 18,
+      "timestamp": "2026-10-11T22:02:51Z",
+      "key_id": "8d7fe1becc5eff89",
+      "source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce"
+    },
+    {
+      "file": "receipts/rcp__lT7ioEP7xwZMzbJ.json",
+      "sha256": "4d8508b13994f54beb38e3bf9810e98fdea175ab2eeced365d6220efbe8d1889",
+      "bytes": 682,
+      "receipt_id": "rcp__lT7ioEP7xwZMzbJ",
+      "type": "OUTCOME_UNKNOWN",
+      "sequence": 22,
+      "timestamp": "2026-10-11T22:08:37Z",
+      "key_id": "8d7fe1becc5eff89",
+      "source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce"
+    },
+    {
+      "file": "receipts/rcp_gGUhLCj966G_J1kh.json",
+      "sha256": "175ee462047630fb133caabd2463f4b95b6e1d2c78502f765c37a1781b9d28ec",
+      "bytes": 725,
+      "receipt_id": "rcp_gGUhLCj966G_J1kh",
+      "type": "OUTCOME_RESOLVED",
+      "sequence": 25,
+      "timestamp": "2026-10-11T22:14:24Z",
+      "key_id": "8d7fe1becc5eff89",
+      "source_sha": "480ee1fbb3782e39ed9ab9a1a0e58756bee628ce"
+    }
+  ],
+  "complete_receipt_history": false,
+  "signed_bytes_modified": false,
+  "note": "Hashes identify original envelope bytes. Signature validity is not proof of delivery, full chain completeness, measured capacity, or a complete acceptance run."
+}

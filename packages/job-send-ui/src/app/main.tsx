@@ -1,3 +1,4 @@
+import "./owner-app.css";
 // The owner app's browser entry (bundled by scripts/build-owner-app.mjs; never imported by the index). The receipt
 // key is compiled in at build time, so /verify does not trust the server at run time (spec: "Verification away from
 // the signer"). Everything else comes from /owner-app/config.json, which the app server writes from its environment.

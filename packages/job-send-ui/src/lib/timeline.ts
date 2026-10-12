@@ -26,6 +26,8 @@ export interface TimelineRow {
   /** The dispatch an UNKNOWN row resolves (the signed receipt's detail.dispatch); the resolve control needs it. */
   dispatchId?: string;
   reason?: string;
+  /** Historical context for this receipt, not a claim about the proposal's current state. */
+  explanation?: string;
   badges: string[];
 }
 
@@ -33,7 +35,6 @@ const PLAIN_LABELS: Partial<Record<ReceiptType, string>> = {
   CONNECTION_CREATED: "Gmail connected",
   AGENT_CONNECTED: "Agent connected",
   JOB_CONFIRMED: "Job confirmed",
-  AI_REVIEW: SAY.aiReview,
   APPROVAL_REJECTED: "Rejected by you",
   APPROVAL_REFUSED: "Approval not used",
   DISPATCH_RESERVED: "Send reserved",
@@ -48,6 +49,19 @@ const sameSend = (a: TimelineReceipt, b: TimelineReceipt) =>
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
+}
+
+function reviewExplanation(outcome: unknown): string | undefined {
+  switch (outcome) {
+    case "clear":
+      return "AI review added no flags. Other job rules still apply.";
+    case "hold":
+      return "AI review flagged this version, so it required owner review. Check Waiting for you for versions still awaiting review.";
+    case "unavailable":
+      return "AI review was unavailable, so this version required owner review. Check Waiting for you for versions still awaiting review.";
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -65,6 +79,9 @@ export function buildTimeline(receipts: readonly TimelineReceipt[]): TimelineRow
     const base = { receiptId: receipt.id, seq: receipt.seq, ts: receipt.ts, badges: [] as string[] };
     const reason = text(receipt.detail?.reason_code) ?? text(receipt.detail?.reason) ?? text(receipt.detail?.error_class);
     switch (receipt.type) {
+      case "AI_REVIEW":
+        rows.push({ ...base, label: SAY.aiReview, tone: "info", control: "none", reason, explanation: reviewExplanation(receipt.detail?.outcome) });
+        break;
       case "ATTEMPT_DENIED":
         rows.push({ ...base, label: SAY.prohibited, tone: "denied", control: "none", reason });
         break;
@@ -106,9 +123,10 @@ export function buildTimeline(receipts: readonly TimelineReceipt[]): TimelineRow
         break;
       }
       case "OUTCOME_RESOLVED": {
-        // As the executor signs it (#520): resolution "sent" when the owner saw it arrive, "not_sent" when it did not.
+        // As the executor signs it: resolution "sent" when the owner saw it arrive, "not_arrived" when they
+        // have not (older receipts say "not_sent"). Not arriving is an observation: the send still counts.
         const seen = receipt.detail?.resolution === "sent";
-        rows.push({ ...base, label: seen ? "You saw it arrive" : "You said it did not arrive", tone: "info", control: "none" });
+        rows.push({ ...base, label: seen ? "You saw it arrive" : SAY.resolvedNotArrived, tone: "info", control: "none" });
         break;
       }
       case "DELIVERY_WITNESSED": {

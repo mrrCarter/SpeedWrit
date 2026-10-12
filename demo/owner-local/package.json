@@ -1,0 +1,27 @@
+{
+  "name": "speedwrit-local",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local SpeedWrit owner-app demo on synthetic data. Never deployed, never pushed.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dial": "node --env-file-if-exists=.env.local server/dial-relay.mjs"
+  },
+  "dependencies": {
+    "@getdial/sdk": "0.41.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vitest": "2.1.8"
+  }
+}

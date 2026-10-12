@@ -261,7 +261,10 @@ export function createJobSendHandler(options: JobSendHttpOptions): (req: Incomin
       // alone would stop Allow and Deny before they reach the client (machine measured it in Chrome, #515).
       "content-security-policy": `default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' ${new URL(checked.redirect_uri).origin}`,
       "x-frame-options": "DENY",
-      "referrer-policy": "no-referrer",
+      // same-origin, never no-referrer: under no-referrer a browser sends "Origin: null" with the form's POST,
+      // and answerConsent refuses a null Origin (CSRF), so every real Allow was a 403. same-origin still sends
+      // no Referer to the client's redirect origin.
+      "referrer-policy": "same-origin",
       ...NO_STORE,
     });
     res.end(html);

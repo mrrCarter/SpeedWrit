@@ -6,8 +6,8 @@
 import { FLAGS, type Flag } from "./flags.js";
 
 const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
-// Pinned. If the vendor rejects it with 422, set AI_REVIEW_MODEL=jev-latest; never retry in code.
-const DEFAULT_MODEL = "jev-1.13";
+// Fixed demo contract. Aliases may change their target; failures hold without a retry.
+const DEFAULT_MODEL = "jev-1.13.0";
 const DEFAULT_BUDGET_MS = 2500;
 
 type Noul = {
@@ -114,6 +114,7 @@ export async function aiReview(input: ReviewInput, options: ReviewOptions = {}):
   if (input.otherClients.some((name) => EMAIL_LIKE.test(name))) return fail("input_contains_address");
 
   const model = options.model ?? process.env.AI_REVIEW_MODEL ?? DEFAULT_MODEL;
+  if (model !== DEFAULT_MODEL) return fail("unsupported_model");
   const holdAt = options.holdAt ?? DEFAULT_HOLD_AT;
   const fetchImpl = options.fetchImpl ?? fetch;
   const ctrl = new AbortController();
@@ -146,7 +147,10 @@ export async function aiReview(input: ReviewInput, options: ReviewOptions = {}):
       // reply that is not JSON, which is malformed rather than a network failure.
       return fail(ctrl.signal.aborted ? "timeout_or_network" : "bad_shape");
     }
-    const answers = (data as { answers?: Record<string, unknown> } | null)?.answers;
+    // The API reports the resolved model version. Never turn a request pin into response evidence.
+    if (typeof data !== "object" || data === null || Array.isArray(data) ||
+        (data as { model?: unknown }).model !== model) return fail("bad_shape");
+    const answers = (data as { answers?: Record<string, unknown> }).answers;
     const probs_bp = {} as Record<Flag, number>;
     const flags: Flag[] = [];
     for (const id of FLAGS) {
@@ -158,12 +162,11 @@ export async function aiReview(input: ReviewInput, options: ReviewOptions = {}):
       probs_bp[id] = Math.round(answer.noul * 10000);
       if (answer.noul >= holdAt[id]) flags.push(id);
     }
-    const reportedModel = (data as { model?: unknown }).model;
     return {
       outcome: flags.length > 0 ? "hold" : "clear",
       flags,
       probs_bp,
-      model: typeof reportedModel === "string" ? reportedModel : model,
+      model,
       ms: now() - started,
     };
   } catch {
