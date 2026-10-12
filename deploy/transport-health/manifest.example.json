@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "canonical_origin": "https://speedwrit.aidenid.com",
+  "upstream_origin": "https://speedwrit-origin.aidenid.com",
+  "deployment": {
+    "repository": "https://github.com/mrrCarter/SpeedWrit",
+    "runtime_revision": "REPLACE_WITH_EXACT_40_HEX_RUNTIME_REVISION",
+    "image_digest": "sha256:REPLACE_WITH_EXACT_64_HEX_IMAGE_DIGEST",
+    "bundle_sha256": "REPLACE_WITH_SHA256_OF_PACKAGED_APP_JS",
+    "bundle_source": "/app/packages/job-send-ui/dist/owner-app/app.js"
+  },
+  "receipt_pin": {
+    "key_id": "REPLACE_WITH_PUBLIC_KEY_ID",
+    "public_key_b64url": "REPLACE_WITH_PUBLIC_ED25519_KEY"
+  },
+  "limits": {
+    "timeout_ms": 5000,
+    "max_metadata_bytes": 65536,
+    "max_bundle_bytes": 8388608
+  }
+}
