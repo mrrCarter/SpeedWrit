@@ -13,6 +13,7 @@ afterEach(cleanup);
 const JOB: JobDraft = {
   jobId: "job_1",
   policyVersion: 1,
+  agentConnectionId: "ac_1",
   recipient: "dana@test.example",
   purpose: "Send Dana at Acme a recap of Tuesday's call.",
   template: { id: "tpl_recap" },
@@ -236,6 +237,7 @@ describe("ConfirmJob", () => {
   it("confirms exactly the authority hash it showed", () => {
     const onConfirm = vi.fn();
     render(<ConfirmJob job={JOB} authoritySha256="abc123def456789" timeZone="UTC" onConfirm={onConfirm} />);
+    expect(screen.getByText("ac_1")).toBeVisible();
     expect(screen.getByText("abc123def456")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Confirm job" }));
     expect(onConfirm).toHaveBeenCalledWith("job_1", "abc123def456789");

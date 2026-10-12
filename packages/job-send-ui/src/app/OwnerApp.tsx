@@ -162,16 +162,26 @@ function NewJobView(props: Pick<OwnerAppProps, "api" | "jobDefaults" | "contacts
       return <p>Connect Gmail and an agent first: a job binds to both.</p>;
     }
     return (
-      <LiveJobForm
-        contacts={contacts}
-        timeZone={timeZone}
-        {...(now ? { now } : {})}
-        onUse={(draft: CompleteDraft) => {
-          if (!ids?.connectionId || !ids.agentConnectionId) return;
-          const body = jobDraftBody(draft, { connectionId: ids.connectionId, agentConnectionId: ids.agentConnectionId }, jobDefaults);
-          void call(() => api.createJob(body)).then((job) => job && setCreated(job));
-        }}
-      />
+      <>
+        <section aria-label="Agent for this job">
+          <h2>Agent for this job</h2>
+          <p>
+            {ids.agentConnection?.label ? <><bdi>{ids.agentConnection.label}</bdi> (declared) · </> : null}
+            <code>{ids.agentConnectionId}</code>
+          </p>
+          <p>This job stays bound to this connection. After connecting another agent, reopen New job to use it.</p>
+        </section>
+        <LiveJobForm
+          contacts={contacts}
+          timeZone={timeZone}
+          {...(now ? { now } : {})}
+          onUse={(draft: CompleteDraft) => {
+            if (!ids?.connectionId || !ids.agentConnectionId) return;
+            const body = jobDraftBody(draft, { connectionId: ids.connectionId, agentConnectionId: ids.agentConnectionId }, jobDefaults);
+            void call(() => api.createJob(body)).then((job) => job && setCreated(job));
+          }}
+        />
+      </>
     );
   }
   return (
