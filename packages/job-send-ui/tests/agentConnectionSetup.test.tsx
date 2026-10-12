@@ -258,14 +258,14 @@ describe("owner agent connection setup", () => {
     expect(f.posts()).toHaveLength(1);
   });
 
-  it.each(["create", "revoke"])("a 401 during %s follows the existing sign-in return path", async operation => {
+  it.each(["create", "revoke"])("a 401 during %s returns to Connections inside the owner app", async operation => {
     const unauthorized = () => reply({ error: "sign_in" }, 401);
     const f = fixture({ create: unauthorized, revoke: unauthorized, connection: EXISTING });
     const view = show(f.api);
     if (operation === "create") await submitLabel();
     else fireEvent.click(await screen.findByRole("button", { name: "Revoke agent connection" }));
     await act(async () => {});
-    expect(view.signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2F%23%2Fconnect");
+    expect(view.signIn).toHaveBeenCalledWith("/auth/sign-in?return_to=%2Fowner-app%2F%23%2Fconnect");
     expect(screen.queryByText(SAY.agentConnectionCreated)).toBeNull();
     expect(screen.queryByText(SAY.agentConnectionRevoked)).toBeNull();
     expect(f.posts()).toHaveLength(1);
