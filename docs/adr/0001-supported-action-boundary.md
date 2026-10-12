@@ -31,6 +31,8 @@ Google credentials stay in server custody; the client receives a SpeedWrit crede
 | Either | Job confirmation; browser Approve/Reject | SpeedWrit owner session cookie → owner API, with exact Origin and displayed hash | Owner-bound, transactional decisions for the identified job/version. No authority over unrelated actions. [Owner API][owner-api], [dispatch][dispatch]. |
 | Either | Native Gmail UI or browser-driven Gmail sending | Google browser session → Gmail, outside SpeedWrit | No interception or job check implemented. Missing SpeedWrit receipts do not show that these actions did not occur. |
 | Either | Native connector or independent API sending, **if that product supports writes and has sufficient authorization** | Its separate Google grant/token → Google, outside SpeedWrit | No SpeedWrit enforcement. Write support depends on the particular product and granted scopes; no claim that every named native connector can send or is read-only. |
+| Either, where the account permits it | SMTP sending; IMAP mailbox access or changes | Independently authorized mail client using Google OAuth, or an app password where available | Outside SpeedWrit. SMTP sending and IMAP mailbox actions are distinct; neither passes through the job executor. App-password availability depends on account settings and policy. [Mail protocols][mail-protocols], [app-password limits][app-passwords]. |
+| Managed Workspace only | Gmail API actions covered by delegated scopes | Administrator-authorized domain-wide delegation for a service account or OAuth client → Google | Outside SpeedWrit when invoked independently. Delegated access is separate from per-user consent and a confirmed SpeedWrit job; this deployment has not inventoried or validated such grants. [Delegated API access][delegation]. |
 | Managed Workspace only | Candidate restrictions on other apps' Gmail access | Administrator app-access policy → Google OAuth access controls | Future deployment option, not implemented tenant configuration or a per-message SpeedWrit check. Scope and remaining paths require validation. [Official controls][workspace-controls]. |
 | Either | Files, payments, calendar changes or other agent/browser actions | Other tools, sessions or provider credentials | No general action broker implemented. Connecting SpeedWrit does not constrain a client's other available tools. |
 
@@ -44,7 +46,7 @@ For the supported Gmail path, deploy the reviewed server with its database, cred
 
 For a managed Workspace account, a feasible candidate is to permit the SpeedWrit app's required access while restricting other apps' Gmail write access. Google documents restrictions on high-risk Gmail scopes and per-app access settings such as Specific Google data. These are app/scope controls, not SpeedWrit's recipient/version policy. The documentation does not prove this tenant is configured, that native/browser paths are covered, or that all alternative sending authority is removed. [Official Workspace app-access controls][workspace-controls] (checked 2026-10-12).
 
-Before claiming broader enforcement, identify the account type and administrator authority, approved app identities/scopes, and remaining native/session/independent-credential paths. Record the actual policy scope and separately validate permitted and denied actions in an authorized test environment; none of those tenant checks was performed for this ADR. A platform-specific action hook is conditional future work only if a documented interface and validation establish coverage. No universal pre-tool hook or already-enforced Workspace policy is claimed.
+Before claiming broader enforcement, identify the account type and administrator authority, approved app identities/scopes, and remaining native/session/independent-credential paths, including SMTP/IMAP clients, available app passwords and domain-wide delegation grants. App-access restrictions alone are not evidence that these paths have been inventoried or removed. Record the actual policy scope and separately validate permitted and denied actions in an authorized test environment; none of those tenant checks was performed for this ADR. A platform-specific action hook is conditional future work only if a documented interface and validation establish coverage. No universal pre-tool hook or already-enforced Workspace policy is claimed.
 
 ## Evidence discipline
 
@@ -70,3 +72,7 @@ Existing gate, owner, dispatch-race and provider suites are useful regression lo
 [worker]: ../../deploy/owned-domain/README.md
 [tests]: ../../packages/job-send/tests/
 [workspace-controls]: https://knowledge.workspace.google.com/admin/apps/control-which-apps-access-google-workspace-data
+
+[mail-protocols]: https://developers.google.com/workspace/gmail/imap/imap-smtp
+[app-passwords]: https://support.google.com/accounts/answer/185833?hl=en
+[delegation]: https://knowledge.workspace.google.com/admin/apps/control-api-access-with-domain-wide-delegation
