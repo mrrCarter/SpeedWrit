@@ -272,3 +272,52 @@ test('CLI valid explicit manifest has a structured result; malformed file has fi
     assert.equal(await runCli(['--manifest', dir], { ...harness(), write() {} }), 1);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+for (const behavior of ['success', 'configuration_failure', 'timeout']) {
+  test(`default CLI DNS path configures public servers before either query: ${behavior}`, async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'transport-cli-dns-fixture-'));
+    try {
+      const manifest = fixture(); if (behavior === 'timeout') manifest.limits.timeout_ms = 25;
+      const path = join(dir, 'manifest.json'); await writeFile(path, JSON.stringify(manifest));
+      const calls = []; let cancelled = false;
+      const fake = {
+        servers: ['127.0.0.1'],
+        setServers(servers) {
+          calls.push(['setServers', ...servers]);
+          if (behavior === 'configuration_failure') throw new Error('untrusted DNS configuration error');
+          this.servers = [...servers];
+        },
+        async resolve4(hostname) {
+          assert.deepEqual(this.servers, ['1.1.1.1', '8.8.8.8']); calls.push(['resolve4', hostname]);
+          return behavior === 'timeout' ? new Promise(() => {}) : ['203.0.113.10'];
+        },
+        async resolve6(hostname) {
+          assert.deepEqual(this.servers, ['1.1.1.1', '8.8.8.8']); calls.push(['resolve6', hostname]);
+          return behavior === 'timeout' ? new Promise(() => {}) : ['2001:db8::1'];
+        },
+        cancel() { cancelled = true; },
+      };
+      const h = harness(); const output = [];
+      // Deliberately do not inject `resolver`: exercise runCli -> checkTransport -> resolveAddresses.
+      const code = await runCli(['--manifest', path], {
+        fetchImpl: h.fetchImpl, resolverFactory: () => fake,
+        write: (text) => output.push(JSON.parse(text)),
+      });
+      assert.equal(output.length, 1); const result = output[0];
+      assert.deepEqual(result.dns_servers, ['1.1.1.1', '8.8.8.8']);
+      assert.deepEqual(calls[0], ['setServers', '1.1.1.1', '8.8.8.8']);
+      assert.equal(code, behavior === 'success' ? 0 : 1);
+      if (behavior === 'configuration_failure') {
+        assert.equal(calls.length, 1); assert.equal(cancelled, false);
+        assert.equal(failed(result, 'upstream.dns').reason, 'dns_failed');
+      } else {
+        assert.deepEqual(calls.slice(1), [['resolve4', 'speedwrit-origin.aidenid.com'], ['resolve6', 'speedwrit-origin.aidenid.com']]);
+        assert.equal(cancelled, behavior === 'timeout');
+        if (behavior === 'timeout') assert.equal(failed(result, 'upstream.dns').reason, 'dns_timeout');
+        else assert.equal(result.checks.find((item) => item.id === 'upstream.dns').address_count, 2);
+      }
+      assert.equal(h.calls.length, behavior === 'success' ? 6 : 5);
+      assert.ok(!JSON.stringify(result).includes('untrusted DNS'));
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+}

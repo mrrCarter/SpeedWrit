@@ -16,6 +16,7 @@ export const CANONICAL_SOURCE = Object.freeze({
   normalization: 'CRLF_to_LF_only',
 });
 const CANONICAL_ORIGIN = 'https://speedwrit.aidenid.com';
+export const PUBLIC_DNS_SERVERS = Object.freeze(['1.1.1.1', '8.8.8.8']);
 const BUNDLE_PATH = '/owner-app/app.js';
 const METADATA_PATHS = new Set([
   '/.well-known/oauth-protected-resource',
@@ -84,9 +85,10 @@ function check(id, ok, reason, extra = {}) {
 }
 function fixedFailure(id, reason) { return check(id, false, reason); }
 
-/** Uses an independent resolver so a deadline can cancel only this probe's queries. */
-export async function resolveAddresses(hostname, { signal } = {}) {
-  const resolver = new Resolver();
+/** Public DNS only; isolated cancellation and no fallback to OS-discovered servers. */
+export async function resolveAddresses(hostname, { signal, resolverFactory = () => new Resolver() } = {}) {
+  const resolver = resolverFactory();
+  resolver.setServers([...PUBLIC_DNS_SERVERS]);
   const abort = () => resolver.cancel();
   signal?.addEventListener('abort', abort, { once: true });
   try {
@@ -206,7 +208,7 @@ export function observePid(pid) {
 
 /** Dependencies exist solely for offline tests. CLI uses fixed public-only implementations. */
 export async function checkTransport(input, {
-  fetchImpl = globalThis.fetch, resolver = resolveAddresses, processObservation = null,
+  fetchImpl = globalThis.fetch, resolver = resolveAddresses, resolverFactory, processObservation = null,
   now = () => new Date().toISOString(),
 } = {}) {
   const started = Date.now();
@@ -220,7 +222,8 @@ export async function checkTransport(input, {
   catch { return { ...base, healthy: false, reasons: ['canonical_source_mismatch'], checks: [] }; }
   const responseErrors = new Set();
   const safeFetch = makeFetchGuard(manifest, fetchImpl, responseErrors);
-  const dns = dnsCheck(new URL(manifest.upstream_origin).hostname, manifest.limits.timeout_ms, resolver);
+  const dns = dnsCheck(new URL(manifest.upstream_origin).hostname, manifest.limits.timeout_ms,
+    (hostname, options) => resolver(hostname, { ...options, resolverFactory }));
   const readiness = checkReadiness(manifest.canonical_origin, {
     fetchImpl: safeFetch, timeoutMs: manifest.limits.timeout_ms, maxBodyBytes: manifest.limits.max_metadata_bytes,
   });
@@ -252,6 +255,7 @@ export async function checkTransport(input, {
     expected_deployment: manifest.deployment,
     canonical_readiness: { ready: canonicalResult.ready, passed: canonicalResult.checks.filter((item) => item.ok).length, total: canonicalResult.checks.length },
     process_observation: processResult,
+    dns_servers: [...PUBLIC_DNS_SERVERS],
     dns_configuration_verified: false,
     canonical_source: CANONICAL_SOURCE,
     checks,
