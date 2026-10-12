@@ -5,12 +5,14 @@ import { parseTask, createXaiModel, runAgent } from './runner.mjs';
 
 export async function readTaskInput(env, stdin) {
   if (env.WORLDS_TASK_JSON) return parseTask(env.WORLDS_TASK_JSON);
-  let text = '';
+  const chunks = []; let size = 0;
   for await (const chunk of stdin) {
-    text += chunk.toString();
-    if (Buffer.byteLength(text) > 32768) throw new WorldsError('task_invalid');
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += bytes.byteLength;
+    if (size > 32768) throw new WorldsError('task_invalid');
+    chunks.push(bytes);
   }
-  return parseTask(text);
+  return parseTask(Buffer.concat(chunks).toString('utf8'));
 }
 export async function main(env = process.env, stdin = process.stdin) {
   if (env.WORLDS_MODEL_PROVIDER !== 'xai') throw new WorldsError('model_provider_invalid');

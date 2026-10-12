@@ -29,6 +29,12 @@ test('task can arrive through stdin without reading project files', async () => 
   assert.deepEqual(await readTaskInput({}, Readable.from([JSON.stringify(task), '\n'])), task);
   await assert.rejects(readTaskInput({}, Readable.from(['x'.repeat(32769)])), /task_invalid/);
 });
+test('stdin preserves a UTF-8 character split across byte chunks', async () => {
+  const unicodeTask = { ...task, mission: { ...task.mission, title: 'Résumé 👋' } };
+  const bytes = Buffer.from(JSON.stringify(unicodeTask));
+  const split = bytes.indexOf(Buffer.from('👋')) + 2;
+  assert.deepEqual(await readTaskInput({}, Readable.from([bytes.subarray(0, split), bytes.subarray(split)])), unicodeTask);
+});
 test('tool schema refuses arbitrary paths, billing tools, extra fields and implicit comment visibility', () => {
   assert.equal(TOOLS.length, 4);
   for (const [name, args] of [['refund', {}], ['get_ticket', { ticket_id: '../admin' }], ['get_ticket', { ticket_id: '17', url: 'http://example.test' }], ['update_ticket', { ticket_id: '17', comment: { body: 'hello' } }], ['update_ticket', { ticket_id: '17' }], ['update_ticket', { ticket_id: '17', status: 'closed' }]]) assert.throws(() => validateCall(name, args));
