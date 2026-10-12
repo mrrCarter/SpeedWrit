@@ -168,6 +168,52 @@ test('explicit tests require enabled preference and respect persisted cooldown',
   await h.request('/owner/alerts/test',{});await h.alerts.tick();assert.equal(h.calls.length,1);
   h.advance(60001);await h.alerts.tick();assert.equal(h.calls.length,2);
 });
+test('fresh opt-in after Gmail STOP permits an explicit test and retains its cooldown',async t=>{
+  const h=await harness(t);await h.request('/owner/alerts/preferences',{enabled:true});
+  await h.executor.engageStop(h.seed.connection,h.seed.owner);await h.alerts.tick();
+  assert.equal((await h.request('/owner/alerts/preferences')).body.enabled,false);
+  assert.equal((await h.request('/owner/alerts/test',{})).status,409);
+  assert.equal((await h.request('/owner/alerts/preferences',{enabled:true})).body.enabled,true);
+  assert.equal((await h.request('/owner/alerts/test',{})).status,202);
+  await h.alerts.tick();assert.equal(h.calls.length,1,'a newly requested owner test does not require Gmail');
+  const first=(await db.pool.query("SELECT status,attempt_id FROM owner_alert_outbox WHERE owner_id=$1 AND kind='test'",[h.seed.owner])).rows[0];
+  assert.equal(first.status,'accepted');assert.ok(first.attempt_id);
+  await h.request('/owner/alerts/test',{});await h.alerts.tick();assert.equal(h.calls.length,1);
+  h.advance(60001);await h.alerts.tick();assert.equal(h.calls.length,2);
+  assert.equal(h.stub.callCount,0,'test calls never send an email');
+});
+test('inactive Gmail cancels automatic attention while an explicit test alone can be attempted',async t=>{
+  const h=await harness(t);await h.request('/owner/alerts/preferences',{enabled:true});
+  await h.held();await db.pool.query("UPDATE connections SET status='needs_reconnect' WHERE id=$1",[h.seed.connection]);
+  await h.alerts.tick();h.advance(9000);await h.alerts.tick();assert.equal(h.calls.length,0);
+  await h.request('/owner/alerts/test',{});await h.alerts.tick();assert.equal(h.calls.length,1);
+  const rows=(await db.pool.query('SELECT kind,status,attempt_id FROM owner_alert_outbox WHERE owner_id=$1 ORDER BY kind',[h.seed.owner])).rows;
+  assert.deepEqual(rows.map(({kind,status})=>({kind,status})),[{kind:'attention',status:'cancelled'},{kind:'test',status:'accepted'}]);
+  assert.equal(rows[0].attempt_id,null);assert.equal(h.stub.callCount,0);
+});
+for(const beyondPage of [false,true]) {
+  test(`STOP after a queued test cancels it${beyondPage?' even beyond the receipt page':''}`,async t=>{
+    const h=await harness(t);await h.request('/owner/alerts/preferences',{enabled:true});
+    await h.request('/owner/alerts/test',{});
+    if(beyondPage)await h.executor.withTx(h.seed.owner,async tx=>{
+      // Committed, ineligible receipt traffic places STOP outside the worker's first 500 rows.
+      for(let i=0;i<500;i++)await h.executor.writeReceipt(tx,'AGENT_CONNECTED',{detail:{agent_connection:h.seed.agentConnection}});
+    });
+    await h.executor.engageStop(h.seed.connection,h.seed.owner);await h.alerts.tick();
+    assert.equal(h.calls.length,0);assert.equal((await h.request('/owner/alerts/preferences')).body.enabled,false);
+    const row=(await db.pool.query("SELECT status,attempt_id FROM owner_alert_outbox WHERE owner_id=$1 AND kind='test'",[h.seed.owner])).rows[0];
+    assert.equal(row.status,'cancelled');assert.equal(row.attempt_id,null);assert.equal(h.stub.callCount,0);
+  });
+}
+test('alerts Off cancels a disconnected queued test and re-enabling never replays it',async t=>{
+  const h=await harness(t);await h.executor.engageStop(h.seed.connection,h.seed.owner);
+  await h.request('/owner/alerts/preferences',{enabled:true});await h.request('/owner/alerts/test',{});
+  await h.request('/owner/alerts/preferences',{enabled:false});await h.alerts.tick();
+  await h.request('/owner/alerts/preferences',{enabled:true});h.advance(70000);await h.alerts.tick();
+  assert.equal(h.calls.length,0);assert.equal((await h.request('/owner/integrations')).body.dial.pending,0);
+  const row=(await db.pool.query("SELECT status,attempt_id FROM owner_alert_outbox WHERE owner_id=$1 AND kind='test'",[h.seed.owner])).rows[0];
+  assert.equal(row.status,'cancelled');assert.equal(row.attempt_id,null);
+});
 test('ambiguous calls are terminal and never retried after a tick or restart',async t=>{
   const h=await harness(t);h.opts.call=async id=>{h.calls.push(id);throw Error('private provider failure');};
   await h.request('/owner/alerts/preferences',{enabled:true});await h.request('/owner/alerts/test',{});await h.alerts.tick();
